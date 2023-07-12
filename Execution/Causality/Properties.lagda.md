@@ -1,9 +1,3 @@
----
-title: Properties of causal paths
-author: Jonathan Castello
-date: 2023-02-23
-css: ['/styles/styles.css']
----
 <!--
 ```agda
 {-# OPTIONS --safe --without-K --exact-split --no-import-sorts #-}

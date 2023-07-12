@@ -1,9 +1,3 @@
----
-title: Distributed sites
-author: Jonathan Castello
-date: 2023-01-28
-css: ['/styles/styles.css']
----
 <!--
 ```agda
 {-# OPTIONS --safe --without-K --exact-split --no-import-sorts #-}

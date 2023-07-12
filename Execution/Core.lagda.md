@@ -1,9 +1,3 @@
----
-title: Execution diagrams
-author: Jonathan Castello
-date: 2022-10-18
-css: ['/styles/styles.css']
----
 <!--
 ```agda
 {-# OPTIONS --safe --without-K --exact-split --no-import-sorts #-}
