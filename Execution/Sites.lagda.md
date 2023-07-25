@@ -16,6 +16,10 @@ module Execution.Sites where
 ```agda
   open import Function
     using (_∘_)
+  open import Data.Unit
+    using (⊤)
+  open import Data.Product
+    using (Σ-syntax; ∃-syntax; _×_)
   open import Data.Nat
     as ℕ
     using (ℕ)
@@ -35,11 +39,129 @@ module Execution.Sites where
 </details>
 
 ```agda
-  data Tree (T : Type) : Type where
-    ∅    :                   Tree T
-    leaf : T      →          Tree T
-    _∗_  : Tree T → Tree T → Tree T
+  data Tree : Type where
+    ∅   : Tree
+    ■   : Tree
+    _∗_ : Tree → Tree → Tree
 
+  data Site : Tree → Type where
+    here   : Site ■
+    thereˡ : ({Γ₁} Γ₂  : Tree) → Site Γ₁ → Site (Γ₁ ∗ Γ₂)
+    thereʳ : ( Γ₁ {Γ₂} : Tree) → Site Γ₂ → Site (Γ₁ ∗ Γ₂)
+
+
+  data _⇶_ : Tree → Tree → Type where
+    noop : (Γ : Tree) → (Γ ⇶ Γ)
+
+    -- Composition
+    _∥_ : {Γ₁ Γ₂ Γ₃ Γ₄ : Tree}
+        → ( Γ₁       ⇶  Γ₃      )
+        → (      Γ₂  ⇶       Γ₄ )
+        → ((Γ₁ ∗ Γ₂) ⇶ (Γ₃ ∗ Γ₄))
+    _;_ : {Γ₁ Γ₂ Γ₃ : Tree}
+        → (Γ₁ ⇶ Γ₂)
+        →      (Γ₂ ⇶ Γ₃)
+        → (Γ₁   ⇶    Γ₃)
+
+    -- Local transformations
+    tick :    ■    ⇶    ■
+    fork :    ■    ⇶ (■ ∗ ■)
+    join : (■ ∗ ■) ⇶    ■
+    init :    ∅    ⇶    ■
+    term :    ■    ⇶    ∅
+
+    -- Permutations
+    emp₁ :    ■    ⇶ (■ ∗ ∅)
+    emp₂ : (■ ∗ ∅) ⇶    ■
+    swap : (■ ∗ ■) ⇶ (■ ∗ ■)
+    rota : ((■ ∗  ■) ∗ ■ )
+         ⇶ ( ■ ∗ (■  ∗ ■))
+
+  initial[_] : ∀{Γ₁ Γ₂} → (Γ₁ ⇶ Γ₂) → Tree
+  initial[_] {Γ₁ = Γ₁} _ = Γ₁
+
+  final[_] : ∀{Γ₁ Γ₂} → (Γ₁ ⇶ Γ₂) → Tree
+  final[_] {Γ₂ = Γ₂} _ = Γ₂
+
+
+  data Tick : ∀{Γ₁ Γ₂} → (Γ₁ ⇶ Γ₂) → Type where
+    here : Tick tick
+    thereˡ : ∀{Γ₁ Γ₂ Γ₁' Γ₂'}
+           → {left  : Γ₁  ⇶ Γ₂ }
+           → (right : Γ₁' ⇶ Γ₂')
+           → Tick left
+           → Tick (left ∥ right)
+    thereʳ : ∀{Γ₁ Γ₂ Γ₁' Γ₂'}
+           → (left  : Γ₁  ⇶ Γ₂ )
+           → {right : Γ₁' ⇶ Γ₂'}
+           → Tick right
+           → Tick (left ∥ right)
+    thenᵇ : ∀{Γ₁ Γᵢ Γ₂}
+          → {prefix : Γ₁ ⇶ Γᵢ}
+          → (suffix : Γᵢ ⇶ Γ₂)
+          → Tick prefix
+          → Tick (prefix ; suffix)
+    thenᶠ : ∀{Γ₁ Γᵢ Γ₂}
+          → (prefix : Γ₁ ⇶ Γᵢ)
+          → {suffix : Γᵢ ⇶ Γ₂}
+          → Tick suffix
+          → Tick (prefix ; suffix)
+
+  data Layer : Type where
+    Par Seq : Layer
+
+  -- A foliation is a sequential list of concurrent steps.
+  -- That is, it is a diagram in which concurrent composition only appears
+  -- under sequential composition, with all sequential compositions
+  -- fully left-associated, with an initial `noop` to start the sequence.
+  IsFoliation[_] : (k : Layer) → ∀{Γ₁ Γ₂} → (Γ₁ ⇶ Γ₂) → Type
+  -- A sequential composition is a foliation at the Seq layer,
+  -- as long as its constituents are as well.
+  IsFoliation[ k ] (x ; y)  = (k ≡ Seq) × IsFoliation[ Seq ] x × IsFoliation[ Par ] y
+  -- A concurrent composition is a foliation at the Par layer,
+  -- as long as its constituents are as well.
+  IsFoliation[ k ] (x ∥ y)  = (k ≡ Par) × IsFoliation[ Par ] x × IsFoliation[ Par ] y
+  -- The `noop` diagrams is a foliation at either Seq or Par layer.
+  IsFoliation[ k ] (noop _) = (      ⊤)
+  -- All other atomic diagrams are foliations only at Par.
+  IsFoliation[ k ] tick     = (k ≡ Par)
+  IsFoliation[ k ] fork     = (k ≡ Par)
+  IsFoliation[ k ] join     = (k ≡ Par)
+  IsFoliation[ k ] init     = (k ≡ Par)
+  IsFoliation[ k ] term     = (k ≡ Par)
+  IsFoliation[ k ] emp₁     = (k ≡ Par)
+  IsFoliation[ k ] emp₂     = (k ≡ Par)
+  IsFoliation[ k ] swap     = (k ≡ Par)
+  IsFoliation[ k ] rota     = (k ≡ Par)
+
+  IsFoliation : ∀{Γ₁ Γ₂} → (Γ₁ ⇶ Γ₂) → Type
+  IsFoliation = IsFoliation[ Seq ]
+
+  -- !!! this isn't actually sufficient to define Event unless `exec` is a foliation !!!
+  -- for instance, we'll miss the initial cut if the diagram doesn't begin on a `noop`.
+  -- and we'll *definitely* miss events on cuts along a `;` buried under a `∥`.
+  --
+  -- consider instead defining interior cuts first, then tacking on the terminal cuts.
+  -- an interior cut is anywhere along a `;`, and cuts in a `∥` are a pair of cuts.
+  --
+  -- alternatively, just require that `exec` be a foliation,
+  -- and prove that events in subdiagrams lift uniquely to events in larger diagrams.
+  data Cut {Γ₁ Γ₂} : (exec : Γ₁ ⇶ Γ₂) → Type where
+    now  : (exec : Γ₁ ⇶ Γ₂)
+         → Cut exec
+    back : ∀{Γᵢ} {prefix : Γ₁ ⇶ Γᵢ} (suffix : Γᵢ ⇶ Γ₂)
+         → Cut prefix
+         → Cut (prefix ; suffix)
+
+  cut : ∀{Γ₁ Γ₂} {exec : Γ₁ ⇶ Γ₂} → Cut exec → Tree
+  cut (now exec) = final[ exec ]
+  cut (back _ c) = cut c
+
+  Event : ∀{Γ₁ Γ₂} → (Γ₁ ⇶ Γ₂) → Type
+  Event exec = Σ[ c ∈ Cut exec ] Site (cut c)
+
+
+{-
   -- Equivalence of trees up to balance and order,
   -- establishing ⟨Tree T / _≅_ , _∗_⟩ as a semigroup.
   data _≅_ {T : Type} : (_ _ : Tree T) → Type where
@@ -170,4 +292,5 @@ module Execution.Sites where
     ‵lookup (‵assoc⁻¹ _ _ _) (thereˡ _           _ ) = Eq.refl
     ‵lookup (‵assoc⁻¹ _ _ _) (thereʳ _ (thereˡ _ _)) = Eq.refl
     ‵lookup (‵assoc⁻¹ _ _ _) (thereʳ _ (thereʳ _ _)) = Eq.refl
+-}
 ```
