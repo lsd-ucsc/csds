@@ -136,6 +136,9 @@ module Execution.Core where
     Γ[ Cut.now exec ] = trailing[ exec ]
     Γ[ Cut.back _ t ] = Γ[ t ]
 
+    _∈_ : {exec : Γ₁ ⇶ Γ₂} → Tree Ty[ exec ] → Cut exec → Type
+    a ∈ c = a Sites.∈ Γ[ c ]
+
     Site : {exec : Γ₁ ⇶ Γ₂} → Cut exec → Type
     Site c = Sites.Site Γ[ c ]
   Cut = Cut.Cut
@@ -144,8 +147,13 @@ module Execution.Core where
   module Event where
     record Event (exec : Γ₁ ⇶ Γ₂) : Type where
       constructor _,_
-      field cut[_]  : Cut exec
-      field site[_] : Cut.Site cut[_]
+      field {state[_]} : Tree Ty[ exec ]
+      field cut[_]     : Cut exec
+      field index[_]   : state[_] Cut.∈ cut[_]
+
+      site[_] : Cut.Site cut[_]
+      site[_] = Sites.site index[_]
+
     open Event public
 
     open import Relation.Binary.PropositionalEquality
@@ -157,12 +165,14 @@ module Execution.Core where
     -- With deepest gratitude to an archived Reddit comment by Jannis Limperg.
     -- https://old.reddit.com/r/agda/comments/ax9rnx/help_with_equality_of_dependent_records/ehu86iv/
     eq : {exec : Γ₁ ⇶ Γ₂}
+       → {a b : Tree T}
        → {t₁ t₂ : Cut exec}
-       → {s₁    : Cut.Site t₁}
-       → {   s₂ : Cut.Site t₂}
+       → {s₁    : a Cut.∈ t₁ }
+       → {   s₂ : b Cut.∈ t₂ }
+       → (a  ≡ b )
        → (t₁ ≡ t₂)
-       → (y : (x : t₁ ≡ t₂) → (s₁ ≡[ Eq.cong Cut.Site x ] s₂))
+       → (z : (x : a ≡ b) → (y : t₁ ≡ t₂) → (s₁ ≡[ Eq.cong₂ Cut._∈_ x y ] s₂))
        → (t₁ , s₁) ≡ (t₂ , s₂)
-    eq Eq.refl f = Eq.cong (λ ▢ → (_ , ▢)) (f Eq.refl)
+    eq x@Eq.refl y@Eq.refl f = Eq.cong (λ ▢ → (_ , ▢)) (f x y)
   Event = Event.Event
 ```

@@ -5,64 +5,88 @@ open import Agda.Primitive
 module Clock.Interpret where
   open import Function
     using (_∘_)
+  open import Data.Unit
+    using (⊤)
+  open import Data.Product
+    using (_×_; _,_; -,_)
   open import Data.Sum
     using (inj₁; inj₂)
   open import Execution.Sites
     as Sites
-    using (Tree; Site; _∗_)
+    using (Tree; Site; _∗_; site)
   open import Execution.Core
     using (perm; tick; fork; join)
     using (_⇶[_]_; _⇶_; id; _∥_; _⟫_)
-    using (Event; Tick)
-  open import Execution.Causality
-    as HB
-    using ()
+    using (Cut; Event; Tick)
   open Event
-    using (_,_)
+    using ()
 
-  variable
-    T : Type
-    Γ Γ₁ Γ₂ Γ₃ Γ₄ : Tree (Tree T)
-    Action State : Type
+  infix 5 _↦_
 
-  Valuation : Type → Tree (Tree T) → Type
-  Valuation State Γ = Site Γ → State
+  Instance : {T : Type} → (T → Type) → (Tree T → Type)
+  Instance f Tree.∅ = ⊤
+  Instance f (Tree.leaf x) = f x
+  Instance f (Γ₁ ∗ Γ₂) = Instance f Γ₁ × Instance f Γ₂
 
-  par : Valuation State Γ₁ → Valuation State Γ₂ → Valuation State (Γ₁ ∗ Γ₂)
-  par f g (Site.thereˡ _ ix) = f ix
-  par f g (Site.thereʳ _ ix) = g ix
-
-  left : Valuation State (Γ₁ ∗ Γ₂) → Valuation State Γ₁
-  left f = f ∘ Site.thereˡ _
-
-  right : Valuation State (Γ₁ ∗ Γ₂) → Valuation State Γ₂
-  right f = f ∘ Site.thereʳ _
-
-  _⊗_ : (Valuation State Γ₁        → Valuation State Γ₂       )
-      → (Valuation State       Γ₃  → Valuation State       Γ₄ )
-      → (Valuation State (Γ₁ ∗ Γ₃) → Valuation State (Γ₂ ∗ Γ₄))
-  (f ⊗ g) x = par (f (left x)) (g (right x))
-
-  data Step (Action State : Type) : Type where
-    act   : Action → State → Step Action State
-    merge : State  → State → Step Action State
+  _↦_ : {T : Type} → Tree (Tree T) → (T → Type) → Type
+  Γ ↦ τ = Instance τ (Sites.flatten Γ)
 
   -- Given an algebra on steps, we can specify computations
   -- on replicas across spatially-distributed sites.
-  module _ (alg : Step Action State → State) where
-    apply : ∀{k} (exec : Γ₁ ⇶[ k ] Γ₂) (acts : Tick exec → Action)
-          → (Valuation State Γ₁ → Valuation State Γ₂)
-    apply  id   acts   = Function.id
-    apply (perm σ) _ f = f ∘ Sites.‵index (Sites.‵sym σ)
-    apply  fork    _ f = Function.const (f Site.here)
-    apply  tick acts f = Function.const (alg (act (acts _) (f Site.here)))
-    apply  join    _ f = Function.const (alg (merge (f (Site.thereˡ _ Site.here))
-                                                    (f (Site.thereʳ _ Site.here)) ))
-    apply (  left ∥  right) acts = apply left   (acts ∘ inj₁) ⊗ apply right  (acts ∘ inj₂)
-    apply (prefix ⟫ suffix) acts = apply suffix (acts ∘ inj₂) ∘ apply prefix (acts ∘ inj₁)
+  module _ {T : Type} {State : T → Type} {Action : Tree T → Tree T → Type} where
+    variable
+      Γ Γ₁ Γ₂ Γ₃ Γ₄ : Tree (Tree T)
+
+    foo : (Γ₁ Sites.≅ Γ₂) → (Γ₁ ↦ State) → (Γ₂ ↦ State)
+    foo (Sites.‵refl _) =
+      λ f → f
+    foo (Sites.‵swap  _ _) =
+      λ(f , g) → (g , f)
+    foo (Sites.‵assoc _ _ _) =
+      λ((f , g) , h) → (f , (g , h))
+    foo (Sites.‵cong  σ₁ σ₂) =
+      λ(f , g) → (foo σ₁ f , foo σ₂ g)
+    foo (Sites.‵trans σ₁ σ₂) =
+      foo σ₂ ∘ foo σ₁
+
+    -- A labeling of the `tick`s in an execution.
+    Actions : ∀{k} (exec : Γ₁ ⇶[ k ] Γ₂) → Type
+    Actions (perm σ) = ⊤
+    Actions (tick {Γ₁} {Γ₂}) = Instance State Γ₁ → Instance State Γ₂
+    Actions fork = ⊤
+    Actions join = ⊤
+    Actions id   = ⊤
+    Actions (x ∥ y) = Actions x × Actions y
+    Actions (x ⟫ y) = Actions x × Actions y
+
+    apply : ∀{k} (exec : Γ₁ ⇶[ k ] Γ₂) → Actions exec
+          → ((Γ₁ ↦ State) → (Γ₂ ↦ State))
+    apply (id)     _ = Function.id
+    apply (fork)   _ = Function.id
+    apply (join)   _ = Function.id
+    apply (perm σ) _ = foo σ
+    apply (tick)   a = a
+    apply (x ∥ y) (a₁ , a₂) = Data.Product.map (apply x a₁) (apply y a₂)
+    apply (x ⟫ y) (a₁ , a₂) = apply y a₂ ∘ apply x a₁
+
+    probe : {exec : Γ₁ ⇶ Γ₂}
+          → (t : Execution.Core.Cut.Cut exec)
+          → Actions exec
+          → (Γ₁ ↦ State)
+          → (Execution.Core.Cut.Γ[ t ] ↦ State)
+    probe (Cut.now _)       (acts)     = apply _ acts
+    probe (Cut.back step t) (acts , _) = probe t acts
+
+    pick : ∀{a} → (a Sites.∈ Γ₁)
+         → (Γ₁ ↦ State)
+         → Instance State a
+    pick (Sites.here)        f      =        f
+    pick (Sites.thereˡ _ x) (f , _) = pick x f
+    pick (Sites.thereʳ _ x) (_ , f) = pick x f
 
     timestamp : {exec : Γ₁ ⇶ Γ₂}
-              → (Tick exec → Action)
-              → Valuation State Γ₁
-              → (Event exec → State)
-    timestamp acts init (t , s) = apply (HB.before[ t ]) (acts ∘ HB.tliftˡ t) init s
+              → Actions exec
+              → (Γ₁ ↦ State)
+              → (t : Event exec)
+              → Instance State Event.state[ t ]
+    timestamp acts inputs (t Event., s) = pick s (probe t acts inputs)

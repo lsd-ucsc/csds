@@ -17,7 +17,7 @@ module Execution.Causality where
   open import Data.Unit
     using (⊤)
   open import Data.Product
-    using (Σ-syntax)
+    using (Σ-syntax; -,_)
   open import Data.Sum
     using (inj₁; inj₂)
   open import Relation.Binary.Construct.Composition
@@ -28,13 +28,11 @@ module Execution.Causality where
     using (_≡_)
   open import Execution.Sites
     as Tree
-    using (Tree; Site; _∗_)
+    using (Tree; Site; _∈_; _∗_; Match[_])
   open import Execution.Core
     using (_⇶[_]_; _⇶_; _⇶₁_; Event; Tick; Cut)
     using (perm; tick; fork; join; id; _∥_; _⟫_)
   open Event using (_,_)
-
-  infixl 20 _⊗_
 
   variable
     T : Type
@@ -44,27 +42,14 @@ module Execution.Causality where
 </details>
 
 ```agda
-  -- Concurrent composition of indexed families of paths.
-  data _⊗_ {T : Type} {Γ₁ Γ₂ Γ₃ Γ₄ : Tree T}
-           (f : Site Γ₁ → Site Γ₂ → Type)
-           (g : Site Γ₃ → Site Γ₄ → Type)
-         : Site (Γ₁ ∗ Γ₃) → Site (Γ₂ ∗ Γ₄) → Type where
-    thereˡ : ∀ a b
-           → f a b
-           → (f ⊗ g) (Site.thereˡ Γ₃ a) (Site.thereˡ Γ₄ b)
-
-    thereʳ : ∀ a b
-           → g a b
-           → (f ⊗ g) (Site.thereʳ Γ₁ a) (Site.thereʳ Γ₂ b)
-
   Spanning[_] : ∀{k} → (Γ₁ ⇶[ k ] Γ₂) → (Site Γ₁ → Site Γ₂ → Type)
-  Spanning[ id     ] a b = b ≡ a
-  Spanning[ perm p ] a b = b ≡ Tree.‵index p a
+  Spanning[ id     ] a b = Match[ Tree.‵refl _ ] a b
+  Spanning[ perm σ ] a b = Match[ σ ] a b
   Spanning[ tick   ] _ _ = ⊤
   Spanning[ fork   ] _ _ = ⊤
   Spanning[ join   ] _ _ = ⊤
-  Spanning[ left   ∥ right  ] = Spanning[ left   ]     ⊗ Spanning[ right  ]
-  Spanning[ prefix ⟫ suffix ] = Spanning[ prefix ] Rel.; Spanning[ suffix ]
+  Spanning[ left   ∥ right  ] = Spanning[ left   ] Tree.⊗ Spanning[ right  ]
+  Spanning[ prefix ⟫ suffix ] = Spanning[ prefix ] Rel.;  Spanning[ suffix ]
 
 
   -- The type of time intervals within an execution.
