@@ -52,6 +52,69 @@ open import Agda.Primitive
 -}
 module Snapshot.ChandyLamport where
 
+open import Data.Nat using (ℕ)
+open import Data.Vec using (Vec; map)
+open import Data.Bool using (Bool)
+open import Data.List using (List; mapMaybe)
+open import Data.Product using (_×_)
+open import Data.Maybe using (Maybe; just; nothing)
+
 import Execution.Core
 
--- ...
+-- | State at each node and in the network.
+-- * Per node.
+-- * Per channel.
+-- * Fully connected. TODO: Not connected.
+record Conf (S M : Type) (n : ℕ) : Type where
+  constructor conf
+  field nodes : Vec S n
+  field chans : Vec (Vec (List M) n) n
+
+data CLS (S M : Type) (n : ℕ) : Type where
+  live : S → CLS S M n
+  snap : S → (S × Vec (Bool × List M) n) → CLS S M n
+--done : S → (S × Vec (List M) n) → CLS S M n
+
+CLS-proj : ∀ {S M n} → CLS S M n → S
+CLS-proj (live s) = s
+CLS-proj (snap s _) = s
+
+-- | Either an underlying message, or a red-letter-message.
+data CLM (M : Type) : Type where
+  msg : M → CLM M
+  red : CLM M
+
+CLM-proj : ∀ {M} → CLM M → Maybe M
+CLM-proj (msg m) = just m
+CLM-proj red = nothing
+
+-- CLC : Type → Type → ℕ → Type
+-- CLC S M n = Conf (CLS S M n) (CLM M) n
+
+Conf-proj : ∀ {S M n} → Conf (CLS S M n) (CLM M) n → Conf S M n
+Conf.nodes (Conf-proj (conf nodes _)) = map CLS-proj nodes 
+Conf.chans (Conf-proj (conf _ chans)) = map (map (mapMaybe CLM-proj)) chans
+
+ConfRel : Type → Type → ℕ → Type₁
+ConfRel S M n = (_ _ : Conf S M n) → Type
+
+-- | Relational model of transitions in a chandy lamport execution.
+--
+-- PLR explaining what JMC said: This is subtly wrong because CLM-proj
+-- drops red-letter-messages, meaning that our use of Conf-proj in
+-- CL.lift allows system transitions "under" red-letter-messages that
+-- are next in line to be received.
+--
+-- JMC: This is fundamentally wrong because *both* levels of the
+-- relation must handle delivered messages.
+--
+-- JMC: deliver-red, deliver-msg
+--
+-- PLR: i.e. Only our transitions lead to deliveries in the underlying transition.
+--
+-- JMC: Should all transitions be delivery transitions? I think
+-- so. "Here, take a message, produce a bunch more messages, and
+-- change your state." Everything is just that.
+data CL (S M : Type) (n : ℕ) (_⇒_ : ConfRel S M n) : ConfRel (CLS S M n) (CLM M) n where
+  -- possible transitions
+  lift : ∀ Γ Γ' → (Conf-proj Γ ⇒ Conf-proj Γ') → CL S M n _⇒_ Γ Γ'
