@@ -5,10 +5,11 @@ open import Agda.Primitive
 {-
 # META
 
-* ~~Next time: Read one or more of the papers (chandy-lamport and/or
-  Dijkstra note).~~
-* Next-next time: Poke at the elements of an implementation and/or
+* [x] Next time: Read one or more of the papers (chandy-lamport and/or
+  Dijkstra note).
+* [x] Next-next time: Poke at the elements of an implementation and/or
   proof.
+* [ ] Figure out how to handle red-letter messages.
 
 # Chandy Lamport algorithm
 
@@ -53,11 +54,12 @@ open import Agda.Primitive
 module Snapshot.ChandyLamport where
 
 open import Data.Nat using (ℕ)
-open import Data.Vec using (Vec; map)
-open import Data.Bool using (Bool)
-open import Data.List using (List; mapMaybe)
-open import Data.Product using (_×_)
+open import Data.Vec using (Vec; []; _∷_; map; replicate)
+open import Data.Bool using (Bool; false; true)
+open import Data.List using (List; []; _∷_; mapMaybe) renaming (map to mapl)
+open import Data.Product using (_×_; _,_)
 open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Fin using (Fin; zero; suc)
 
 import Execution.Core
 
@@ -70,9 +72,12 @@ record Conf (S M : Type) (n : ℕ) : Type where
   field nodes : Vec S n
   field chans : Vec (Vec (List M) n) n
 
+Recordings : Type → ℕ → Type
+Recordings M n = Vec (Bool × List M) n
+
 data CLS (S M : Type) (n : ℕ) : Type where
   live : S → CLS S M n
-  snap : S → (S × Vec (Bool × List M) n) → CLS S M n
+  snap : S → S × Recordings M n → CLS S M n
 --done : S → (S × Vec (List M) n) → CLS S M n
 
 CLS-proj : ∀ {S M n} → CLS S M n → S
@@ -95,8 +100,57 @@ Conf-proj : ∀ {S M n} → Conf (CLS S M n) (CLM M) n → Conf S M n
 Conf.nodes (Conf-proj (conf nodes _)) = map CLS-proj nodes 
 Conf.chans (Conf-proj (conf _ chans)) = map (map (mapMaybe CLM-proj)) chans
 
+-- | Given a state and a message produce a new state and vector of
+-- outgoing messages on each channel.
+Reaction : Type → Type → ℕ → Type
+Reaction S M n = S → M → Fin n → S × Vec (List M) n
+
 ConfRel : Type → Type → ℕ → Type₁
 ConfRel S M n = (_ _ : Conf S M n) → Type
+
+Deliverable : ∀ {S M n} → M → Conf S M n → Type
+Deliverable = _
+
+deliver : ∀ {S M n} {m : M} {Γ : Conf S M n} → Reaction S M n → Deliverable m Γ → Conf S M n
+deliver = _
+
+data App (S M : Type) (n : ℕ) (a : Reaction S M n) : ConfRel S M n where
+  drive : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
+        → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a d)
+
+-- | response messages for initial snapshot: no red message at the
+-- specified index and red messages eslewhere
+init-reds : ∀ {M n} → Fin n → Vec (List (CLM M)) n
+init-reds zero = [] ∷ replicate _ (red ∷ [])
+init-reds (suc i) = (red ∷ []) ∷ init-reds i 
+
+stop-recording : ∀ {n} {M : Type} → Fin n → Recordings M n → Recordings M n
+stop-recording zero ((done-rec , rec) ∷ xs) = (true , rec) ∷ xs 
+stop-recording (suc i) (x ∷ xs) = x ∷ stop-recording i xs
+
+lift : ∀ {S M n} → Reaction S M n → Reaction (CLS S M n) (CLM M) n
+lift a (live st) (msg m) src =
+  -- in which we drive the underlying app with a message and wrap its output
+  let st' , ms = a st m src in
+  ( live st' 
+  , map (mapl msg) ms
+  )
+lift a (snap st (st₀ , recs)) (msg m) src =
+  -- in which we drive the underlying app as above, but also record the message
+  let st' , ms = a st m src in
+  ( snap st' (st₀ , {!!})
+  , map (mapl msg) ms
+  )
+lift a (live st) red src =
+  -- in which we start a snapshot for everything but the channel from which we rec'd red
+  ( snap st (st , stop-recording src (replicate _ (false , [])))
+  , init-reds src
+  )
+lift a (snap st (st₀ , recs)) red src =
+  -- in which we stop recording a channel
+  ( snap st (st₀ , stop-recording src recs)
+  , replicate _ []
+  )
 
 -- | Relational model of transitions in a chandy lamport execution.
 --
@@ -117,4 +171,4 @@ ConfRel S M n = (_ _ : Conf S M n) → Type
 -- change your state." Everything is just that.
 data CL (S M : Type) (n : ℕ) (_⇒_ : ConfRel S M n) : ConfRel (CLS S M n) (CLM M) n where
   -- possible transitions
-  lift : ∀ Γ Γ' → (Conf-proj Γ ⇒ Conf-proj Γ') → CL S M n _⇒_ Γ Γ'
+--lift : ∀ Γ Γ' → (Conf-proj Γ ⇒ Conf-proj Γ') → CL S M n _⇒_ Γ Γ'
