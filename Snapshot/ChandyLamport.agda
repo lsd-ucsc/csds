@@ -9,7 +9,11 @@ open import Agda.Primitive
   Dijkstra note).
 * [x] Next-next time: Poke at the elements of an implementation and/or
   proof.
-* [ ] Figure out how to handle red-letter messages.
+* [ ] Figure out how to handle red-letter messages (tie up loose ends).
+  * [ ] JMC: We may want to switch from a functional repr to a relational repr
+        for local transitions (Reaction). B/C relational defns are easier to
+        use for reasoning.
+* [ ] Change the boolean in Recordings to an ADT.
 
 # Chandy Lamport algorithm
 
