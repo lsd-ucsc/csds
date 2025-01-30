@@ -14,6 +14,7 @@ open import Agda.Primitive
         for local transitions (Reaction). B/C relational defns are easier to
         use for reasoning.
 * [ ] Change the boolean in Recordings to an ADT.
+* [ ] fill missing holes
 
 # Chandy Lamport algorithm
 
@@ -58,9 +59,9 @@ open import Agda.Primitive
 module Snapshot.ChandyLamport where
 
 open import Data.Nat using (ℕ)
-open import Data.Vec using (Vec; []; _∷_; map; replicate)
+open import Data.Vec using (Vec; []; _∷_; replicate) renaming (map to mapv)
 open import Data.Bool using (Bool; false; true)
-open import Data.List using (List; []; _∷_; mapMaybe) renaming (map to mapl)
+open import Data.List using (List; []; _∷_; _∷ʳ_; mapMaybe) renaming (map to mapl)
 open import Data.Product using (_×_; _,_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Fin using (Fin; zero; suc)
@@ -76,8 +77,12 @@ record Conf (S M : Type) (n : ℕ) : Type where
   field nodes : Vec S n
   field chans : Vec (Vec (List M) n) n
 
+data RecordingStatus : Type where
+  active : RecordingStatus
+  inactive : RecordingStatus
+
 Recordings : Type → ℕ → Type
-Recordings M n = Vec (Bool × List M) n
+Recordings M n = Vec (RecordingStatus × List M) n
 
 data CLS (S M : Type) (n : ℕ) : Type where
   live : S → CLS S M n
@@ -101,8 +106,8 @@ CLM-proj red = nothing
 -- CLC S M n = Conf (CLS S M n) (CLM M) n
 
 Conf-proj : ∀ {S M n} → Conf (CLS S M n) (CLM M) n → Conf S M n
-Conf.nodes (Conf-proj (conf nodes _)) = map CLS-proj nodes 
-Conf.chans (Conf-proj (conf _ chans)) = map (map (mapMaybe CLM-proj)) chans
+Conf.nodes (Conf-proj (conf nodes _)) = mapv CLS-proj nodes 
+Conf.chans (Conf-proj (conf _ chans)) = mapv (mapv (mapMaybe CLM-proj)) chans
 
 -- | Given a state and a message produce a new state and vector of
 -- outgoing messages on each channel.
@@ -124,31 +129,35 @@ data App (S M : Type) (n : ℕ) (a : Reaction S M n) : ConfRel S M n where
 
 -- | response messages for initial snapshot: no red message at the
 -- specified index and red messages eslewhere
-init-reds : ∀ {M n} → Fin n → Vec (List (CLM M)) n
-init-reds zero = [] ∷ replicate _ (red ∷ [])
-init-reds (suc i) = (red ∷ []) ∷ init-reds i 
+broadcast-reds : ∀ {M n} → Fin n → Vec (List (CLM M)) n
+broadcast-reds zero = [] ∷ replicate _ (red ∷ [])
+broadcast-reds (suc i) = (red ∷ []) ∷ broadcast-reds i 
 
 stop-recording : ∀ {n} {M : Type} → Fin n → Recordings M n → Recordings M n
-stop-recording zero ((done-rec , rec) ∷ xs) = (true , rec) ∷ xs 
+stop-recording zero ((status , rec) ∷ xs) = (inactive , rec) ∷ xs 
 stop-recording (suc i) (x ∷ xs) = x ∷ stop-recording i xs
+
+enqueue-message : ∀ {n M} → Fin n → M → Recordings M n → Recordings M n
+enqueue-message zero m ((status , rec) ∷ xs) = (status , rec ∷ʳ m ) ∷ xs
+enqueue-message (suc src) m (x ∷ xs) = x ∷ enqueue-message src m xs
 
 lift : ∀ {S M n} → Reaction S M n → Reaction (CLS S M n) (CLM M) n
 lift a (live st) (msg m) src =
   -- in which we drive the underlying app with a message and wrap its output
   let st' , ms = a st m src in
   ( live st' 
-  , map (mapl msg) ms
+  , mapv (mapl msg) ms
   )
 lift a (snap st (st₀ , recs)) (msg m) src =
   -- in which we drive the underlying app as above, but also record the message
   let st' , ms = a st m src in
-  ( snap st' (st₀ , {!!})
-  , map (mapl msg) ms
+  ( snap st' (st₀ , enqueue-message src m recs)
+  , mapv (mapl msg) ms
   )
 lift a (live st) red src =
-  -- in which we start a snapshot for everything but the channel from which we rec'd red
-  ( snap st (st , stop-recording src (replicate _ (false , [])))
-  , init-reds src
+  -- in which we start a snapshot for everything but the channel from which we recv'd red
+  ( snap st (st , stop-recording src (replicate _ (active , [])))
+  , broadcast-reds src
   )
 lift a (snap st (st₀ , recs)) red src =
   -- in which we stop recording a channel
