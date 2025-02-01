@@ -54,7 +54,7 @@ module Execution.Sites where
 
     -- These rules additionally make ⟨Tree T / _≅_ , ∅ , _∗_⟩ a monoid.
     --‵unitₗ   : ∀ a → (∅ ∗ a) ≅      a
-    --‵unit₁⁻¹ : ∀ a →      a  ≅ (∅ ∗ a)
+    --‵unitₗ⁻¹ : ∀ a →      a  ≅ (∅ ∗ a)
 
     --‵unitᵣ   : ∀ a → (a ∗ ∅) ≅  a
     --‵unitᵣ⁻¹ : ∀ a →  a      ≅ (a ∗ ∅)
