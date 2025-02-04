@@ -53,13 +53,16 @@ module Execution.Sites where
     ‵assoc⁻¹ : ∀ a b c  → ( a ∗ (b  ∗ c)) ≅ ((a ∗  b) ∗ c )
 
     -- These rules additionally make ⟨Tree T / _≅_ , ∅ , _∗_⟩ a monoid.
-    --‵unitₗ   : ∀ a → (∅ ∗ a) ≅      a
-    --‵unitₗ⁻¹ : ∀ a →      a  ≅ (∅ ∗ a)
-
-    --‵unitᵣ   : ∀ a → (a ∗ ∅) ≅  a
-    --‵unitᵣ⁻¹ : ∀ a →  a      ≅ (a ∗ ∅)
+    ‵unitₗ   : ∀ a → (∅ ∗ a) ≅      a
+    ‵unitₗ⁻¹ : ∀ a →      a  ≅ (∅ ∗ a)
 
   syntax ‵trans s₁ s₂ = s₁ ∘≅ s₂
+
+  ‵unitᵣ : (a : Tree T) → (a ∗ ∅) ≅  a
+  ‵unitᵣ a = ‵trans (‵swap a ∅) (‵unitₗ a)
+
+  ‵unitᵣ⁻¹ : (a : Tree T) →  a      ≅ (a ∗ ∅)
+  ‵unitᵣ⁻¹ a = ‵trans (‵unitₗ⁻¹ a) (‵swap ∅ a)
 
   ‵sym : {a b : Tree T} → (a ≅ b) → (b ≅ a)
   ‵sym (p ‵∗ q)         = ‵sym p ‵∗ ‵sym q
@@ -68,6 +71,8 @@ module Execution.Sites where
   ‵sym (‵swap    a b)   = ‵swap b a
   ‵sym (‵assoc   a b c) = ‵assoc⁻¹ a b c
   ‵sym (‵assoc⁻¹ a b c) = ‵assoc a b c
+  ‵sym (‵unitₗ   a)     = ‵unitₗ⁻¹ a
+  ‵sym (‵unitₗ⁻¹ a)     = ‵unitₗ a
 
   ‶sym : {a b : Tree T} → (p : a ≅ b) → ‵sym (‵sym p) ≡ p
   ‶sym (p ‵∗ q)         = Eq.cong₂ _‵∗_   (‶sym p) (‶sym q)
@@ -76,6 +81,8 @@ module Execution.Sites where
   ‶sym (‵swap    a b)   = Eq.refl
   ‶sym (‵assoc   a b c) = Eq.refl
   ‶sym (‵assoc⁻¹ a b c) = Eq.refl
+  ‶sym (‵unitₗ   a)     = Eq.refl
+  ‶sym (‵unitₗ⁻¹ a)     = Eq.refl
 
   size : Tree T → ℕ
   size Tree.∅              = 0
@@ -89,6 +96,8 @@ module Execution.Sites where
   ‵size (‵swap    a b)   = ℕ-Prop.+-comm (size a) (size b)
   ‵size (‵assoc   a b c) =         ℕ-Prop.+-assoc (size a) (size b) (size c)
   ‵size (‵assoc⁻¹ a b c) = Eq.sym (ℕ-Prop.+-assoc (size a) (size b) (size c))
+  ‵size (‵unitₗ   a)     = Eq.refl
+  ‵size (‵unitₗ⁻¹ a)     = Eq.refl
 
 
   data Site {T : Type} : Tree T → Type where
@@ -118,6 +127,9 @@ module Execution.Sites where
     ‵index (‵assoc⁻¹ a b c) (thereʳ _ (thereˡ _ ix)) = thereˡ _ (thereʳ _ ix)
     ‵index (‵assoc⁻¹ a b c) (thereʳ _ (thereʳ _ ix)) = thereʳ _ ix
 
+    ‵index (‵unitₗ   a) (thereʳ _ ix) =          ix
+    ‵index (‵unitₗ⁻¹ a)           ix  = thereʳ _ ix
+
   module _ where
     ‶index : {Γ₁ Γ₂ : Tree T} (p : Γ₁ ≅ Γ₂)
            → (ix : Site Γ₁)
@@ -141,6 +153,9 @@ module Execution.Sites where
     ‶index (‵assoc⁻¹ _ _ _) (thereˡ _           _ ) = Eq.refl
     ‶index (‵assoc⁻¹ _ _ _) (thereʳ _ (thereˡ _ _)) = Eq.refl
     ‶index (‵assoc⁻¹ _ _ _) (thereʳ _ (thereʳ _ _)) = Eq.refl
+
+    ‶index (‵unitₗ   _) (thereʳ _ _) = Eq.refl
+    ‶index (‵unitₗ⁻¹ _)           _  = Eq.refl
 
   lookup : {Γ : Tree T} → Site Γ → T
   lookup (here {a})   = a
@@ -170,4 +185,7 @@ module Execution.Sites where
     ‵lookup (‵assoc⁻¹ _ _ _) (thereˡ _           _ ) = Eq.refl
     ‵lookup (‵assoc⁻¹ _ _ _) (thereʳ _ (thereˡ _ _)) = Eq.refl
     ‵lookup (‵assoc⁻¹ _ _ _) (thereʳ _ (thereʳ _ _)) = Eq.refl
+
+    ‵lookup (‵unitₗ   _) (thereʳ _ _) = Eq.refl
+    ‵lookup (‵unitₗ⁻¹ _)           _  = Eq.refl
 ```

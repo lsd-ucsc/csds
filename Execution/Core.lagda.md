@@ -17,9 +17,13 @@ module Execution.Core where
   open import Data.Empty
     using (⊥)
   open import Data.Unit
-    using (⊤)
+    using (⊤; tt)
   open import Data.Sum
-    using (_⊎_)
+    as Sum
+    using (_⊎_; inj₁; inj₂)
+  open import Data.Product
+    as Prod
+    using (_×_; _,_)
   open import Function
     as Function
     using (_∘_)
@@ -32,7 +36,7 @@ module Execution.Core where
     -- Sets of sites over which executions act
     Γ  Γ₁ Γ₂ Γ₃ Γ₄ : Tree (Tree T)
 
-  infix   5 _⇶[_]_ _⇶₁_ _⇶_
+  infix   5 _⇶_ _⇶[_]_
 --infix   6 _∗_
   infixl 15 _⟫_ _;_
   infix  20 _∥_ _⊗_
@@ -41,128 +45,132 @@ module Execution.Core where
 </details>
 
 ```agda
-  -- define an indexing type with two values, one for each type we want to combine
-  data Layer : Type where
-    Par Seq : Layer
+  data _⇶_ {T : Type} : (Γ₁ Γ₂ : Tree (Tree T)) → Type where
+    -- concurrent composition
+    _∥_ : (Γ₁ ⇶ Γ₂)
+        → (Γ₃ ⇶ Γ₄)
+        → (Γ₁ ∗ Γ₃ ⇶ Γ₂ ∗ Γ₄)
 
-  -- forward-declare the type, before we define its constructors
-  data _⇶[_]_ {T : Type} : Tree (Tree T) → Layer → Tree (Tree T) → Type
-
-  -- now define aliases for a fixed index
-  _⇶₁_ : {T : Type} → Tree (Tree T) → Tree (Tree T) → Type
-  _⇶₁_ = _⇶[ Par ]_
-
-  _⇶_ : {T : Type} → Tree (Tree T) → Tree (Tree T) → Type
-  _⇶_ = _⇶[ Seq ]_
-
-  data _⇶[_]_ {- signature declared earlier -} where
-    -- a permutation on sites
-    perm : ∀{a b} → (σ : a Sites.≅ b) → (a ⇶₁ b)
+    -- sequential composition
+    _⟫_ : (Γ₁ ⇶ Γ₂)
+        → (Γ₂ ⇶ Γ₃)
+        → (Γ₁ ⇶ Γ₃)
 
     -- a local computation at a site
-    tick : ∀{a b} → leaf a          ⇶₁ leaf b
+    tick : ∀{a b} → leaf a          ⇶ leaf b
 
     -- the factorization of one site into two
-    fork : ∀{a b} → leaf (a ∗ b)    ⇶₁ leaf a ∗ leaf b
+    fork : ∀{a b} → leaf (a ∗ b)    ⇶ leaf a ∗ leaf b
 
     -- the assimilation of two sites into one
-    join : ∀{a b} → leaf a ∗ leaf b ⇶₁ leaf (a ∗ b)
+    join : ∀{a b} → leaf a ∗ leaf b ⇶ leaf (a ∗ b)
 
-    -- We don't need these yet.
-    ---- the creation of an empty site
-    --init :                        ∅ ⇶₁ leaf ∅
-    ---- the destruction of an empty site
-    --term :                   leaf ∅ ⇶₁      ∅
+    -- the creation of an empty site
+    init :                        ∅ ⇶ leaf ∅
 
-    -- concurrently compose two groups of concurrent steps
-    _∥_ : (Γ₁ ⇶₁ Γ₂)
-        → (Γ₃ ⇶₁ Γ₄)
-        → (Γ₁ ∗ Γ₃ ⇶₁ Γ₂ ∗ Γ₄)
+    -- the destruction of an empty site
+    term :                   leaf ∅ ⇶      ∅
 
-    -- an empty sequence of groups of concurrent steps
-    id : Γ ⇶ Γ
-    -- sequentially append a group of concurrent steps
-    _⟫_ : (Γ₁ ⇶  Γ₂)
-        → (Γ₂ ⇶₁ Γ₃)
-        → (Γ₁ ⇶  Γ₃)
+    -- a permutation on sites
+    perm : ∀{a b} → (σ : a Sites.≅ b) → (a ⇶ b)
 
   -- Helpers for extracting the type-level implicits from an execution
-  Ty[_] : ∀{k} {T : Type} {Γ₁ Γ₂ : Tree (Tree T)} (exec : Γ₁ ⇶[ k ] Γ₂) → Type
+  Ty[_] : {T : Type} {Γ₁ Γ₂ : Tree (Tree T)} (exec : Γ₁ ⇶ Γ₂) → Type
   Ty[_] {T = T} exec = T
 
-  leading[_] : ∀{k} (exec : Γ₁ ⇶[ k ] Γ₂) → Tree (Tree Ty[ exec ])
+  leading[_] : (exec : Γ₁ ⇶ Γ₂) → Tree (Tree Ty[ exec ])
   leading[_] {Γ₁ = Γ₁} exec = Γ₁
 
-  trailing[_] : ∀{k} (exec : Γ₁ ⇶[ k ] Γ₂) → Tree (Tree Ty[ exec ])
+  trailing[_] : (exec : Γ₁ ⇶ Γ₂) → Tree (Tree Ty[ exec ])
   trailing[_] {Γ₂ = Γ₂} exec = Γ₂
 
 
-  pad : (Γ : Tree (Tree T)) → (Γ ⇶₁ Γ)
-  pad = perm ∘ Sites.‵refl
+  data Layer : Type where
+    Permute : Layer
+    Compute : Layer
 
-  _;_ : (Γ₁ ⇶ Γ₂) → (Γ₂ ⇶ Γ₃) → (Γ₁ ⇶ Γ₃)
-  prefix ; id              =  prefix
-  prefix ; (suffix ⟫ step) = (prefix ; suffix) ⟫ step
+  _⇶[_]_ : {T : Type} (Γ₁ : Tree (Tree T)) (k : Layer) (Γ₂ : Tree (Tree T)) → Type
+  Γ₁ ⇶[ Permute ] Γ₂ = Γ₁ Sites.≅ Γ₂
+  Γ₁ ⇶[ Compute ] Γ₂ = Γ₁ ⇶ Γ₂
 
-  _⊗_ : (Γ₁ ⇶ Γ₂) → (Γ₃ ⇶ Γ₄) → (Γ₁ ∗ Γ₃ ⇶ Γ₂ ∗ Γ₄)
-  id                ⊗ id                = id
-  id                ⊗ (prefix₂ ⟫ step₂) = (id      ⊗ prefix₂) ⟫ (pad _ ∥ step₂)
-  (prefix₁ ⟫ step₁) ⊗ id                = (prefix₁ ⊗ id)      ⟫ (step₁ ∥ pad _)
-  (prefix₁ ⟫ step₁) ⊗ (prefix₂ ⟫ step₂) = (prefix₁ ⊗ prefix₂) ⟫ (step₁ ∥ step₂)
+  id : ∀{k} → (Γ : Tree (Tree T)) → (Γ ⇶[ k ] Γ)
+  id {k = Permute} = Sites.‵refl
+  id {k = Compute} = perm ∘ id
+
+  _;_ : ∀{k} → (Γ₁ ⇶[ k ] Γ₂) → (Γ₂ ⇶[ k ] Γ₃) → (Γ₁ ⇶[ k ] Γ₃)
+  _;_ {k = Permute} = Sites.‵trans
+  _;_ {k = Compute} = _⟫_
+
+  _⊗_ : ∀{k} → (Γ₁ ⇶[ k ] Γ₂) → (Γ₃ ⇶[ k ] Γ₄) → (Γ₁ ∗ Γ₃ ⇶[ k ] Γ₂ ∗ Γ₄)
+  _⊗_ {k = Permute} = Sites._‵∗_
+  _⊗_ {k = Compute} = _∥_
 
 
-  Tick : ∀{T : Type} {k} → {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶[ k ] Γ₂) → Type
-  -- ⇶₁
-  Tick (perm σ) = ⊥
+  Tick : {T : Type} {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+  Tick (x ∥ y)  = Tick x ⊎ Tick y
+  Tick (x ⟫ y)  = Tick x ⊎ Tick y
   Tick tick     = ⊤
   Tick fork     = ⊥
   Tick join     = ⊥
-  Tick (x ∥ y)  = Tick x ⊎ Tick y
-  -- ⇶
-  Tick id      = ⊥
-  Tick (x ⟫ y) = Tick x ⊎ Tick y
+  Tick init     = ⊥
+  Tick term     = ⊥
+  Tick (perm σ) = ⊥
+
 
   module Cut where
-    data Cut {T : Type} {Γ₁ Γ₂ : Tree (Tree T)} : (Γ₁ ⇶ Γ₂) → Type where
-      now : (exec : Γ₁ ⇶ Γ₂)
-          → Cut exec
-
-      back : ∀{Γᵢ} {prefix : Γ₁ ⇶ Γᵢ}
-           → (step : Γᵢ ⇶₁ Γ₂)
-           → Cut prefix
-           → Cut (prefix ⟫ step)
+    Cut : (Γ₁ ⇶ Γ₂) → Type
+    Cut (x₁ ∥ x₂) = Cut x₁ × Cut x₂
+    Cut (x₁ ⟫ x₂) = Cut x₁ ⊎ Cut x₂
+    Cut tick      = ⊤ ⊎ ⊤
+    Cut fork      = ⊤ ⊎ ⊤
+    Cut join      = ⊤ ⊎ ⊤
+    Cut init      = ⊤ ⊎ ⊤
+    Cut term      = ⊤ ⊎ ⊤
+    Cut (perm _ ) = ⊤ ⊎ ⊤
 
     Γ[_] : {exec : Γ₁ ⇶ Γ₂} → Cut exec → Tree (Tree Ty[ exec ])
-    Γ[ Cut.now exec ] = trailing[ exec ]
-    Γ[ Cut.back _ t ] = Γ[ t ]
+    Γ[_] {exec = x₁ ∥ x₂} (c₁ , c₂) = Γ[ c₁ ] ∗ Γ[ c₂ ]
+    Γ[_] {exec = x₁ ⟫ x₂} (inj₁ c₁) = Γ[ c₁ ]
+    Γ[_] {exec = x₁ ⟫ x₂} (inj₂ c₂) = Γ[ c₂ ]
+    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = tick}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
+    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = fork}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
+    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = join}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
+    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = init}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
+    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = term}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
+    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = perm σ} = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
 
     Site : {exec : Γ₁ ⇶ Γ₂} → Cut exec → Type
     Site c = Sites.Site Γ[ c ]
   Cut = Cut.Cut
 
+  LeadingCut[_] : (exec : Γ₁ ⇶ Γ₂) → Cut exec
+  LeadingCut[ x₁ ∥ x₂ ] = (LeadingCut[ x₁ ] , LeadingCut[ x₂ ])
+  LeadingCut[ x₁ ⟫ x₂ ] = inj₂ (LeadingCut[ x₂ ])
+  LeadingCut[ tick   ]  = inj₂ tt
+  LeadingCut[ fork   ]  = inj₂ tt
+  LeadingCut[ join   ]  = inj₂ tt
+  LeadingCut[ init   ]  = inj₂ tt
+  LeadingCut[ term   ]  = inj₂ tt
+  LeadingCut[ perm _ ]  = inj₂ tt
+
+  TrailingCut[_] : (exec : Γ₁ ⇶ Γ₂) → Cut exec
+  TrailingCut[ x₁ ∥ x₂ ] = (TrailingCut[ x₁ ] , TrailingCut[ x₂ ])
+  TrailingCut[ x₁ ⟫ x₂ ] = inj₁ (TrailingCut[ x₁ ])
+  TrailingCut[ tick   ]  = inj₁ tt
+  TrailingCut[ fork   ]  = inj₁ tt
+  TrailingCut[ join   ]  = inj₁ tt
+  TrailingCut[ init   ]  = inj₁ tt
+  TrailingCut[ term   ]  = inj₁ tt
+  TrailingCut[ perm _ ]  = inj₁ tt
+
   -- A site at a time.
-  module Event where
-    record Event (exec : Γ₁ ⇶ Γ₂) : Type where
-      constructor _,_
-      field cut[_]  : Cut exec
-      field site[_] : Cut.Site cut[_]
-    open Event public
-
-    open import Relation.Binary.PropositionalEquality
-      as Eq
-      using (_≡_)
-    open import DependentEquality
-      using (_≡[_]_)
-
-    -- With deepest gratitude to an archived Reddit comment by Jannis Limperg.
-    -- https://old.reddit.com/r/agda/comments/ax9rnx/help_with_equality_of_dependent_records/ehu86iv/
-    eq : {exec : Γ₁ ⇶ Γ₂}
-       → {t₁ t₂ : Cut exec}
-       → {s₁    : Cut.Site t₁}
-       → {   s₂ : Cut.Site t₂}
-       → (t₁ ≡ t₂)
-       → (y : (x : t₁ ≡ t₂) → (s₁ ≡[ Eq.cong Cut.Site x ] s₂))
-       → (t₁ , s₁) ≡ (t₂ , s₂)
-    eq Eq.refl f = Eq.cong (λ ▢ → (_ , ▢)) (f Eq.refl)
-  Event = Event.Event
+  Event : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+  Event                (x₁ ∥ x₂)     = Event x₁ ⊎ Event x₂
+  Event                (x₁ ⟫ x₂)     = Event x₁ ⊎ Event x₂
+  Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} tick     = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
+  Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} fork     = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
+  Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} join     = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
+  Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} init     = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
+  Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} term     = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
+  Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} (perm σ) = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
 ```

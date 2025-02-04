@@ -30,11 +30,11 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
   open import Relation.Binary.PropositionalEquality
     using (_≡_)
   open import Execution.Core
-    using (_⇶[_]_; _⇶_; id; perm; tick; fork; join; _∥_; _⟫_)
+    using (_⇶_; id; perm; tick; fork; join; init; term; _∥_; _⟫_; _;_; _⊗_)
   open import Execution.Sites
     as Sites
     using (Tree; ∅; leaf; _∗_)
-    using (_≅_; _‵∗_; ‵trans; ‵refl; ‵swap; ‵assoc; ‵assoc⁻¹)
+    using (_≅_; _‵∗_; ‵trans; ‵refl; ‵swap; ‵assoc; ‵assoc⁻¹; ‵unitₗ; ‵unitₗ⁻¹)
 ```
 
 </details>
@@ -56,14 +56,15 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     locally  : ∀ {τ₁ τ₂} → (τ₁ ⟶ τ₂)  → τ₁ ⇒ τ₂
     transmit : ∀ {τ} → (src dst : Loc) → τ  ⇒ τ
 
-  Actions : ∀{k} {Γ₁ Γ₂ : Tree (Tree Ty)} → (Γ₁ ⇶[ k ] Γ₂) → Type
+  Actions : {Γ₁ Γ₂ : Tree (Tree Ty)} → (Γ₁ ⇶ Γ₂) → Type
   Actions (x ∥ y) = Actions x × Actions y
   Actions (x ⟫ y) = Actions x × Actions y
   Actions (tick {a} {b}) = a ⇒ b
   Actions (perm σ) = ⊤
   Actions fork = ⊤
   Actions join = ⊤
-  Actions id = ⊤
+  Actions init = ⊤
+  Actions term = ⊤
 
   module CentralizedSemantics where
     Localize : Tree (Tree Ty) → Tree Ty
@@ -78,15 +79,18 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     localize' (‵swap    _ _  ) = λ(x , y) → (y , x)
     localize' (‵assoc   _ _ _) = λ((x , y) , z) → (x , (y , z))
     localize' (‵assoc⁻¹ _ _ _) = λ(x , (y , z)) → ((x , y) , z)
+    localize' (‵unitₗ   _    ) = λ(tt , y) → y
+    localize' (‵unitₗ⁻¹ _    ) = λ y → (tt , y)
 
-    localize : ∀{k Γ₁ Γ₂} → (exec : Γ₁ ⇶[ k ] Γ₂) → Actions exec
+    localize : ∀{Γ₁ Γ₂} → (exec : Γ₁ ⇶ Γ₂) → Actions exec
              → (Localize Γ₁ ⟶ Localize Γ₂)
     localize tick (locally  act) = act
     localize tick (transmit _ _) = λ z → z
     localize (perm σ)  _ = localize' σ
-    localize id        _ = λ x → x
     localize fork      _ = λ x → x
     localize join      _ = λ x → x
+    localize init      _ = λ x → x
+    localize term      _ = λ x → x
     localize (f ∥ g) (act₁ , act₂) = λ(x , y) →
       ( localize f act₁ x
       , localize g act₂ y )
@@ -101,17 +105,15 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
       send    : ∀ {τ} → (dst : Loc) → (τ ⇒' ∅)
       recv    : ∀ {τ} → (src : Loc) → (∅ ⇒' τ)
 
-      seq'    : ∀ {τ₁ τ₂ τ₃} → (τ₁ ⇒' τ₂) → (τ₂ ⇒' τ₃) → (τ₁ ⇒' τ₃)
-      par'    : ∀ {τ₁ τ₁' τ₂ τ₂'} → (τ₁ ⇒' τ₂) → (τ₁' ⇒' τ₂') → ((τ₁ ∗ τ₁') ⇒' (τ₂ ∗ τ₂'))
-
-    Actions' : ∀{k} {Γ₁ Γ₂ : Tree (Tree Ty)} → (Γ₁ ⇶[ k ] Γ₂) → Type
+    Actions' : {Γ₁ Γ₂ : Tree (Tree Ty)} → (Γ₁ ⇶ Γ₂) → Type
     Actions' (x ∥ y) = Actions' x × Actions' y
     Actions' (x ⟫ y) = Actions' x × Actions' y
     Actions' (tick {a} {b}) = a ⇒' b
     Actions' (perm σ) = ⊤
     Actions' fork = ⊤
     Actions' join = ⊤
-    Actions' id = ⊤
+    Actions' init = ⊤
+    Actions' term = ⊤
 
     Located : ∀{T} → (Γ : Tree (Tree T)) → Type
     Located ∅ = ⊤
@@ -137,15 +139,17 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
       ( (l₁ˡ  ≡ l₂ˡˡ)
       × (l₁ʳˡ ≡ l₂ˡʳ)
       × (l₁ʳʳ ≡ l₂ʳ ) )
+    WellLocated' (‵unitₗ   a) (tt , l₁) l₂ =
+      l₁ ≡ l₂
+    WellLocated' (‵unitₗ⁻¹ a) l₁ (tt , l₂) =
+      l₁ ≡ l₂
 
     -- The only reason this can't be a function `Located Γ₁ → Located Γ₂` is because it would have to be partial.
     -- Specifically, when `join`ing two sites, the sites must be colocated for the join to be valid.
     -- (Likewise, if we were to write the function backwards, as `Located Γ₂ → Located Γ₁`, then when `fork`ing, the
     -- two forked sites must be colocated.)
-    WellLocated : ∀{k} {Γ₁ Γ₂ : Tree (Tree Ty)} → (exec : Γ₁ ⇶[ k ] Γ₂) → Actions exec
+    WellLocated : {Γ₁ Γ₂ : Tree (Tree Ty)} → (exec : Γ₁ ⇶ Γ₂) → Actions exec
                 → (Located Γ₁ → Located Γ₂ → Type)
-    WellLocated id _ l₁ l₂ =
-      l₁ ≡ l₂
     WellLocated (perm σ) _ l₁ l₂ =
       WellLocated' σ l₁ l₂
     WellLocated tick (locally _) l₁ l₂ =
@@ -158,6 +162,8 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     WellLocated join _ (l₁ˡ , l₁ʳ) l₂ =
       ( (l₁ˡ ≡ l₂)
       × (l₁ʳ ≡ l₂) )
+    WellLocated init _ tt l₂ = ⊤
+    WellLocated term _ l₁ tt = ⊤
     WellLocated (f ∥ g) (actsˡ , actsʳ) (l₁ˡ , l₁ʳ) (l₂ˡ , l₂ʳ) =
       ( WellLocated f actsˡ l₁ˡ l₂ˡ
       × WellLocated g actsʳ l₁ʳ l₂ʳ )
@@ -175,57 +181,98 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     -- transformed into local products.)
 
     Epp : (Γ : Tree (Tree Ty)) → Located Γ
-        → (Loc → Tree Ty)
+        → (Loc → Tree (Tree Ty))
     Epp ∅         l self = ∅
-    Epp (leaf τ)  l self = if self ≟ l then τ else ∅
+    Epp (leaf τ)  l self = if self ≟ l then leaf τ else ∅
     Epp (Γ₁ ∗ Γ₂) (lˡ , lʳ) self = (Epp Γ₁ lˡ self ∗ Epp Γ₂ lʳ self)
 
     epp-σ : ∀{Γ₁ Γ₂ : Tree (Tree Ty)} → (σ : Γ₁ ≅ Γ₂) → {l₁ : Located Γ₁} → {l₂ : Located Γ₂} → WellLocated' σ l₁ l₂
-         → ((self : Loc) → (Epp Γ₁ l₁ self ⇒' Epp Γ₂ l₂ self))
+         → ((self : Loc) → (Epp Γ₁ l₁ self ≅ Epp Γ₂ l₂ self))
     epp-σ (σˡ ‵∗ σʳ) (wlˡ , wlʳ) self =
-      par'
-        (epp-σ σˡ wlˡ self)
-        (epp-σ σʳ wlʳ self)
+      (  epp-σ σˡ wlˡ self
+      ‵∗ epp-σ σʳ wlʳ self )
     epp-σ (‵trans σ₁ σ₂) (_ , (wl₁ , wl₂)) self =
-      seq'
+      ‵trans
         (epp-σ σ₁ wl₁ self)
         (epp-σ σ₂ wl₂ self)
     epp-σ (‵refl _) wl self rewrite wl =
-      locally λ x → x
+      ‵refl _
     epp-σ (‵swap _ _) (wlˡ , wlʳ) self rewrite wlˡ | wlʳ =
-      locally λ (x , y) → (y , x)
+      ‵swap _ _
     epp-σ (‵assoc   _ _ _) (wlₗ , wlₘ , wlᵣ) self rewrite wlₗ | wlₘ | wlᵣ =
-      locally λ ((x , y) , z) → (x , (y , z))
+      ‵assoc _ _ _
     epp-σ (‵assoc⁻¹ a b c) (wlₗ , wlₘ , wlᵣ) self rewrite wlₗ | wlₘ | wlᵣ =
-      locally λ (x , (y , z)) → ((x , y) , z)
+      ‵assoc⁻¹ _ _ _
+    epp-σ (‵unitₗ   a) wl self rewrite wl =
+      ‵unitₗ _
+    epp-σ (‵unitₗ⁻¹ a) wl self rewrite wl =
+      ‵unitₗ⁻¹ _
 
-    epp : ∀{k} {Γ₁ Γ₂ : Tree (Tree Ty)} → {l₁ : Located Γ₁} → {l₂ : Located Γ₂}
-        → (exec : Γ₁ ⇶[ k ] Γ₂) → (acts : Actions exec) → WellLocated exec acts l₁ l₂
-        → ((self : Loc) → (Epp Γ₁ l₁ self ⇒' Epp Γ₂ l₂ self))
-    epp {l₂ = l₂} tick (locally act) wl self rewrite wl with self ≟ l₂
-    ... | true  = locally act
-    ... | false = locally λ x → x
-    epp tick (transmit src dst) (wl₁ , wl₂) self rewrite wl₁ | wl₂ with self ≟ src | self ≟ dst
-    ... | true  | true  = locally λ x → x
-    ... | false | false = locally λ x → x
-    ... | true  | false = send dst
-    ... | false | true  = recv src
-    epp {l₁ = l₁} fork acts (wl₁ , wl₂) self rewrite wl₁ | wl₂ with self ≟ l₁
-    ... | true  = locally λ x → x
-    ... | false = locally λ x → (x , x)
-    epp {l₂ = l₂} join acts (wl₁ , wl₂) self rewrite wl₁ | wl₂ with self ≟ l₂
-    ... | true  = locally λ x → x
-    ... | false = locally λ (x , y) → tt
-    epp id acts wl self rewrite wl =
-      locally λ x → x
+    epp : {Γ₁ Γ₂ : Tree (Tree Ty)} → {l₁ : Located Γ₁} → {l₂ : Located Γ₂}
+        → (exec : Γ₁ ⇶ Γ₂) → (acts : Actions exec) → WellLocated exec acts l₁ l₂
+        → ((self : Loc) → (Epp Γ₁ l₁ self ⇶ Epp Γ₂ l₂ self))
     epp (perm σ) acts wl self =
-      epp-σ σ wl self
+      perm (epp-σ σ wl self)
+    epp {l₂ = l₂} tick (locally act) wl self  rewrite wl  with self ≟ l₂
+    ... | true  = tick -- locally act
+    ... | false = perm (‵refl _)
+    epp tick (transmit src dst) (wl₁ , wl₂) self  rewrite wl₁ | wl₂  with self ≟ src | self ≟ dst
+    ... | true  | true  = perm (‵refl _)
+    ... | false | false = perm (‵refl _)
+    ... | true  | false = tick ⟫ term -- send dst
+    ... | false | true  = init ⟫ tick -- recv src
+    epp {l₁ = l₁} fork acts (wl₁ , wl₂) self  rewrite wl₁ | wl₂  with self ≟ l₁
+    ... | true  = fork
+    ... | false = perm (‵unitₗ⁻¹ ∅)
+    epp {l₂ = l₂} join acts (wl₁ , wl₂) self  rewrite wl₁ | wl₂  with self ≟ l₂
+    ... | true  = join
+    ... | false = perm (‵unitₗ ∅)
+    epp {l₂ = l₂} init acts wl self  with self ≟ l₂
+    ... | true  = init
+    ... | false = perm (‵refl _)
+    epp {l₁ = l₁} term acts wl self  with self ≟ l₁
+    ... | true  = term
+    ... | false = perm (‵refl _)
     epp (x₁ ∥ x₂) (acts₁ , acts₂) (wl₁ , wl₂) self =
-      par'
-        (epp x₁ acts₁ wl₁ self)
-        (epp x₂ acts₂ wl₂ self)
+      ( epp x₁ acts₁ wl₁ self
+      ∥ epp x₂ acts₂ wl₂ self )
     epp (x₁ ⟫ x₂) (acts₁ , acts₂) (_ , (wl₁ , wl₂)) self =
-      seq'
-        (epp x₁ acts₁ wl₁ self)
-        (epp x₂ acts₂ wl₂ self)
+      ( epp x₁ acts₁ wl₁ self
+      ⟫ epp x₂ acts₂ wl₂ self )
+
+    -- TODO: Generate unique IDs for each `transmi`, so that every pair of `send` and `recv` can be matched up
+    -- correctly over the network. If Alice sends two messages in sequence, then Bob needs to be able to receive
+    -- those messages in the same order. (Order doesn't really matter, but the point is, each `send` needs to be
+    -- matched with exactly one `recv`, and vice versa.)
+    epp-acts : {Γ₁ Γ₂ : Tree (Tree Ty)} → {l₁ : Located Γ₁} → {l₂ : Located Γ₂}
+             → (exec : Γ₁ ⇶ Γ₂) → (acts : Actions exec) → (wl : WellLocated exec acts l₁ l₂)
+             → ((self : Loc) → Actions' (epp exec acts wl self))
+    epp-acts (perm σ) acts wl self =
+      tt
+    epp-acts {l₂ = l₂} tick (locally act) wl self  rewrite wl  with self ≟ l₂
+    ... | true  = locally act
+    ... | false = tt
+    epp-acts tick (transmit src dst) (wl₁ , wl₂) self  rewrite wl₁ | wl₂  with self ≟ src | self ≟ dst
+    ... | true  | true  = tt
+    ... | false | false = tt
+    ... | true  | false = (send dst , tt)
+    ... | false | true  = (tt , recv src)
+    epp-acts {l₁ = l₁} {l₂ = (_ , _)} fork acts (wl₁ , wl₂) self  rewrite wl₁ | wl₂  with self ≟ l₁
+    ... | true  = tt
+    ... | false = tt
+    epp-acts {l₁ = (_ , _)} {l₂ = l₂} join acts (wl₁ , wl₂) self  rewrite wl₁ | wl₂  with self ≟ l₂
+    ... | true  = tt
+    ... | false = tt
+    epp-acts {l₂ = l₂} init acts wl self  with self ≟ l₂
+    ... | true  = tt
+    ... | false = tt
+    epp-acts {l₁ = l₁} term acts wl self  with self ≟ l₁
+    ... | true  = tt
+    ... | false = tt
+    epp-acts (x₁ ∥ x₂) (acts₁ , acts₂) (wl₁ , wl₂) self =
+      ( epp-acts x₁ acts₁ wl₁ self
+      , epp-acts x₂ acts₂ wl₂ self )
+    epp-acts (x₁ ⟫ x₂) (acts₁ , acts₂) (_ , wl₁ , wl₂) self =
+      ( epp-acts x₁ acts₁ wl₁ self
+      , epp-acts x₂ acts₂ wl₂ self )
 ```

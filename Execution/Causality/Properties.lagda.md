@@ -14,6 +14,12 @@ module Execution.Causality.Properties where
 <summary>Imports, fixity, and variables</summary>
 
 ```agda
+  open import Data.Unit
+    using (⊤; tt)
+  open import Relation.Nullary
+    using (¬_)
+  open import Data.Sum
+    using (inj₁; inj₂)
   open import Data.Product
     using (_,_; proj₁; proj₂)
   open import Relation.Binary.Construct.Composition
@@ -29,17 +35,11 @@ module Execution.Causality.Properties where
     as Tree
     using (Tree; Site)
   open import Execution.Core
-    using (_⇶_; id; _⟫_; _;_)
-    using (Event; Cut)
-  open Event
-    using (_,_)
+    using (_⇶_; Event; Cut; _;_)
+    using (perm; tick; fork; join; init; term; id; _∥_; _⟫_)
   open import Execution.Causality
-    using (_⋯_; init; go)
-    using (before[_]; after[_]; during[_])
-    using (Spanning[_])
-    using (_↝_)
-
-  infixl 20 _⋯∘_
+    using (Arr[_]; _↝_)
+    using (LeadingEvent[_,_]; TrailingEvent[_,_])
 
   variable
     T : Type
@@ -49,268 +49,138 @@ module Execution.Causality.Properties where
 </details>
 
 ```agda
-  _⋯∘_ : {exec : Γ₁ ⇶ Γ₂} {t₁ t₂ t₃ : Cut exec}
-       → (t₁ ⋯ t₂) → (t₂ ⋯ t₃) → (t₁ ⋯ t₃)
-  _        ⋯∘ init _ _ = init _ _
-  go _ t₁₂ ⋯∘ go _ t₂₃ = go _ (t₁₂ ⋯∘ t₂₃)
+  ↝-refl : {exec : Γ₁ ⇶ Γ₂} → (e : Event exec) → (e ↝ e)
+  ↝-refl {exec = x₁ ∥ x₂} (inj₁ s) = ↝-refl s
+  ↝-refl {exec = x₁ ∥ x₂} (inj₂ s) = ↝-refl s
+  ↝-refl {exec = x₁ ⟫ x₂} (inj₁ s) = ↝-refl s
+  ↝-refl {exec = x₁ ⟫ x₂} (inj₂ s) = ↝-refl s
+  ↝-refl {exec = tick}    (inj₁ s) = Eq.refl
+  ↝-refl {exec = tick}    (inj₂ s) = Eq.refl
+  ↝-refl {exec = fork}    (inj₁ s) = Eq.refl
+  ↝-refl {exec = fork}    (inj₂ s) = Eq.refl
+  ↝-refl {exec = join}    (inj₁ s) = Eq.refl
+  ↝-refl {exec = join}    (inj₂ s) = Eq.refl
+  ↝-refl {exec = init}    (inj₁ s) = Eq.refl
+  ↝-refl {exec = init}    (inj₂ s) = Eq.refl
+  ↝-refl {exec = term}    (inj₁ s) = Eq.refl
+  ↝-refl {exec = term}    (inj₂ s) = Eq.refl
+  ↝-refl {exec = perm _}  (inj₁ s) = Eq.refl
+  ↝-refl {exec = perm _}  (inj₂ s) = Eq.refl
 
-  ⋯-refl : {exec : Γ₁ ⇶ Γ₂}
-         → (t : Cut exec)
-         → (t ⋯ t)
-  ⋯-refl (Cut.now  _  ) = _⋯_.init _ _
-  ⋯-refl (Cut.back _ t) = _⋯_.go _ (⋯-refl t)
+  ↝-trans : {exec : Γ₁ ⇶ Γ₂} → (e₁ e₂ e₃ : Event exec)
+          → (e₁ ↝ e₂) → (e₂ ↝ e₃) → (e₁ ↝ e₃)
+  -- Parallel composition
+  ↝-trans {exec = x₁ ∥ x₂} (inj₁ e₁) (inj₁ e₂) (inj₁ e₃) p₁₂ p₂₃ =
+    ↝-trans e₁ e₂ e₃ p₁₂ p₂₃
+  ↝-trans {exec = x₁ ∥ x₂} (inj₂ e₁) (inj₂ e₂) (inj₂ e₃) p₁₂ p₂₃ =
+    ↝-trans e₁ e₂ e₃ p₁₂ p₂₃
+  -- Sequential composition
+  ↝-trans {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₁ e₂) (inj₁ e₃) p₁₂ p₂₃ =
+    ↝-trans e₁ e₂ e₃ p₁₂ p₂₃
+  ↝-trans {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₁ e₂) (inj₂ e₃) p₁₂ (sₓ , p₂ₓ , pₓ₃) =
+    (sₓ , ↝-trans e₁ e₂ LeadingEvent[ x₁ , sₓ ] p₁₂ p₂ₓ , pₓ₃)
+  ↝-trans {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₂ e₂) (inj₂ e₃) (sₓ , p₁ₓ , pₓ₂) p₂₃ =
+    (sₓ , p₁ₓ , ↝-trans TrailingEvent[ x₂ , sₓ ] e₂ e₃ pₓ₂ p₂₃)
+  ↝-trans {exec = x₁ ⟫ x₂} (inj₂ e₁) (inj₂ e₂) (inj₂ e₃) p₁₂ p₂₃ =
+    ↝-trans e₁ e₂ e₃ p₁₂ p₂₃
+  -- Atomic actions
+  ↝-trans {exec = tick} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  ↝-trans {exec = tick} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) p₁₂ p₂₃ = tt
+  ↝-trans {exec = tick} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = tt
+  ↝-trans {exec = tick} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  --
+  ↝-trans {exec = fork} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  ↝-trans {exec = fork} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) p₁₂ p₂₃ = tt
+  ↝-trans {exec = fork} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = tt
+  ↝-trans {exec = fork} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  --
+  ↝-trans {exec = join} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  ↝-trans {exec = join} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) p₁₂ p₂₃ = tt
+  ↝-trans {exec = join} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = tt
+  ↝-trans {exec = join} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  --
+  ↝-trans {exec = init} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  --
+  ↝-trans {exec = term} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  --
+  ↝-trans {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  ↝-trans {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans (Eq.cong (Tree.‵index σ) p₁₂) p₂₃
+  ↝-trans {exec = perm σ} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
+  ↝-trans {exec = perm σ} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
 
-  ⋯-antisym : {exec : Γ₁ ⇶ Γ₂}
-            → {t₁ t₂ : Cut exec}
-            → (t₁ ⋯ t₂)
-            → (t₂ ⋯ t₁)
-            → (t₁ ≡ t₂)
-  ⋯-antisym (init _ _) (init _ _) = Eq.refl
-  ⋯-antisym (go _ t₁₂) (go _ t₂₁) = Eq.cong (Cut.back _) (⋯-antisym t₁₂ t₂₁)
-
-  ⋯-trans = _⋯∘_
-
-  ⋯∘-unitₗ : {exec : Γ₁ ⇶ Γ₂}
-           → {t₁ t₂ : Cut exec}
-           → (t₁₂ : t₁ ⋯ t₂)
-           → ⋯-refl t₁ ⋯∘ t₁₂ ≡ t₁₂
-  ⋯∘-unitₗ (init _ _)     = Eq.refl
-  ⋯∘-unitₗ (go   _ t₁₂) = Eq.cong (go _) (⋯∘-unitₗ t₁₂)
-
-  ⋯∘-unitᵣ : {exec : Γ₁ ⇶ Γ₂}
-           → {t₁ t₂ : Cut exec}
-           → (t₁₂ : t₁ ⋯ t₂)
-           → t₁₂ ⋯∘ ⋯-refl t₂ ≡ t₁₂
-  ⋯∘-unitᵣ (init _ _)   = Eq.refl
-  ⋯∘-unitᵣ (go   _ t₁₂) = Eq.cong (go _) (⋯∘-unitᵣ t₁₂)
-
-  ⋯-prop : {exec : Γ₁ ⇶ Γ₂}
-         → {t₁ t₂ : Cut exec}
-         → (t₁₂ t₁₂′ : t₁ ⋯ t₂)
-         → t₁₂ ≡ t₁₂′
-  ⋯-prop (init _ _)   (init _ _)    = Eq.refl
-  ⋯-prop (go   _ t₁₂) (go   _ t₁₂′) = Eq.cong (go _) (⋯-prop t₁₂ t₁₂′)
-
-  ⋯∘-assoc : {exec : Γ₁ ⇶ Γ₂}
-           → {t₁ t₂ t₃ t₄ : Cut exec}
-           → (t₁₂ : t₁ ⋯ t₂)
-           → (t₂₃ : t₂ ⋯ t₃)
-           → (t₃₄ : t₃ ⋯ t₄)
-           → ((t₁₂ ⋯∘ t₂₃) ⋯∘ t₃₄) ≡ (t₁₂ ⋯∘ (t₂₃ ⋯∘ t₃₄))
-  ⋯∘-assoc _ _ _ = ⋯-prop _ _
-
-  bar″ : {exec : Γ₁ ⇶ Γ₂}
-       → (t : Cut exec)
-       → (before[ t ] ; after[ t ] ≡ exec)
-  bar″ (Cut.now  _  ) = Eq.refl
-  bar″ (Cut.back _ t) = Eq.cong (_⟫ _) (bar″ t)
-
-  bar′ : {exec : Γ₁ ⇶ Γ₂} {t₁ t₂ : Cut exec}
-       → (t₁₂ : t₁ ⋯ t₂)
-       → (before[ t₁ ] ; during[ t₁₂ ] ≡ before[ t₂ ])
-  bar′ (init _ t₁ ) = bar″ t₁
-  bar′ (go   _ t₁₂) = bar′ t₁₂
-
-  bar : {exec : Γ₁ ⇶ Γ₂} {t₁ t₂ : Cut exec}
-      → (t₁₂ : t₁ ⋯ t₂)
-      → (during[ t₁₂ ] ; after[ t₂ ] ≡ after[ t₁ ])
-  bar (init _ _  ) = Eq.refl
-  bar (go   _ t₁₂) = Eq.cong (_⟫ _) (bar t₁₂)
-
-  foo : {exec : Γ₁ ⇶ Γ₂} {t₁ t₂ t₃ : Cut exec}
-      → (t₁₂ : t₁ ⋯ t₂)
-      → (t₂₃ : t₂ ⋯ t₃)
-      → (during[ t₁₂ ] ; during[ t₂₃ ] ≡ during[ t₁₂ ⋯∘ t₂₃ ])
-  foo       t₁₂  (init _ _  ) = bar t₁₂
-  foo (go _ t₁₂) (go   _ t₂₃) = foo t₁₂ t₂₃
-
-  quux : {exec : Γ₁ ⇶ Γ₂}
-       → (t : Cut exec)
-       → id ≡ during[ ⋯-refl t ]
-  quux (Cut.now  _  ) = Eq.refl
-  quux (Cut.back _ t) = quux t
-
-  ;-assoc : (a : Γ₁ ⇶ Γ₂) (b : Γ₂ ⇶ Γ₃) (c : Γ₃ ⇶ Γ₄)
-          → (a ; b) ; c ≡ a ; (b ; c)
-  ;-assoc a b id      = Eq.refl
-  ;-assoc a b (c ⟫ _) = Eq.cong (_⟫ _) (;-assoc a b c)
-
-  -- Properties of spanning paths across separate executions
-  module _ where
-    _∘↝ₙ[_]_ : {prefix : Γ₁ ⇶ Γ₂}
-             → ∀{t₁ t₂} → Spanning[ prefix          ] t₁ t₂
-             → (suffix : Γ₂ ⇶ Γ₃)
-             → ∀{t₃}    → Spanning[          suffix ] t₂ t₃
-             →            Spanning[ prefix ; suffix ] t₁ t₃
-    p₁₂ ∘↝ₙ[ id         ] Eq.refl          = p₁₂
-    p₁₂ ∘↝ₙ[ suffix ⟫ _ ] (tᵢ , p₂ᵢ , pᵢ₃) = (tᵢ , p₁₂ ∘↝ₙ[ suffix ] p₂ᵢ , pᵢ₃)
-
-    ∘↝ₙ-split : {prefix : Γ₁ ⇶ Γ₂} {suffix : Γ₂ ⇶ Γ₃}
-              → {t₁ : Site Γ₁}
-              → {t₃ : Site Γ₃}
-              → Spanning[ prefix ; suffix ] t₁ t₃
-              → (Spanning[ prefix ] Rel.; Spanning[ suffix ]) t₁ t₃
-    ∘↝ₙ-split {suffix = id} t₁↝t₃ = (_ , t₁↝t₃ , Eq.refl)
-    ∘↝ₙ-split {suffix = suffix ⟫ step} (tᵢ , t₁↝tᵢ , tᵢ↝t₃)
-      = let (a , b , c) = ∘↝ₙ-split {suffix = suffix} t₁↝tᵢ in
-        (a , b , (tᵢ , c , tᵢ↝t₃))
-
-    ∘↝ₙ-assoc : {left : Γ₁ ⇶ Γ₂} {middle : Γ₂ ⇶ Γ₃} {right : Γ₃ ⇶ Γ₄}
-              → {t₁ : Site Γ₁}
-              → {t₂ : Site Γ₂}
-              → {t₃ : Site Γ₃}
-              → {t₄ : Site Γ₄}
-              → (p₁₂ : Spanning[ left   ] t₁ t₂)
-              → (p₂₃ : Spanning[ middle ] t₂ t₃)
-              → (p₃₄ : Spanning[ right  ] t₃ t₄)
-              → ((p₁₂ ∘↝ₙ[ middle ] p₂₃) ∘↝ₙ[ right ] p₃₄)
-              ≡[ Eq.cong (λ z → Spanning[ z ] _ _) (;-assoc left middle right) ]
-                (p₁₂ ∘↝ₙ[ middle ; right ] (p₂₃ ∘↝ₙ[ right ] p₃₄))
-    ∘↝ₙ-assoc {right = id}
-              p₁₂ p₂₃ Eq.refl
-       = Eq.refl
-    ∘↝ₙ-assoc {left = left} {middle} {right ⟫ _}
-              p₁₂ p₂₃ (tᵢ , p₃ᵢ , pᵢ₄)
-      = DEq.hom (Eq.cong-∘ (;-assoc left middle right))
-                (DEq.cong (λ _ z → (_ , z , pᵢ₄))
-                          (;-assoc left middle right)
-                          (∘↝ₙ-assoc {left = left} {middle = middle} p₁₂ p₂₃ p₃ᵢ))
-
-  --        t₁    t₂
-  --    |   s₁----s₂    |
-  -- -> |         s₂----| s₃
-  -- -> |   s₁----------| s₃
-  hehe : {exec : Γ₁ ⇶ Γ₂}
-       → {t₁ t₂    : Cut exec}
-       → {s₁       : Cut.Site t₁}
-       → {   s₂    : Cut.Site t₂}
-       → {      s₃ : Site Γ₂}
-       → (t₁₂ : t₁ ⋯ t₂)
-       → Spanning[ during[ t₁₂ ] ] s₁ s₂
-       → Spanning[ after[   t₂ ] ] s₂ s₃
-       → Spanning[ after[  t₁  ] ] s₁ s₃
-  hehe (init t₁ t₂)  p₁₂ Eq.refl          = p₁₂
-  hehe (go   _  t₁₂) p₁₂ (tᵢ , p₂ᵢ , pᵢ₃) = (tᵢ , hehe t₁₂ p₁₂ p₂ᵢ , pᵢ₃)
-
-  --        t₁    t₂    t₃
-  --    |   s₁----s₂    s₃   |
-  -- -> |         s₂----s₃   |
-  -- -> |   s₁----------s₃   |
-  haha : {exec : Γ₁ ⇶ Γ₂}
-       → {t₁ t₂ t₃ : Cut exec}
-       → {s₁       : Cut.Site t₁}
-       → {   s₂    : Cut.Site t₂}
-       → {      s₃ : Cut.Site t₃}
-       → (t₁₂ : t₁ ⋯ t₂)
-       → (t₂₃ : t₂ ⋯ t₃)
-       → Spanning[ during[ t₁₂        ] ] s₁ s₂
-       → Spanning[ during[        t₂₃ ] ] s₂ s₃
-       → Spanning[ during[ t₁₂ ⋯∘ t₂₃ ] ] s₁ s₃
-  haha       t₁₂  (init t₂ t₃ ) p₁₂ p₂₃ = hehe t₁₂ p₁₂ p₂₃
-  haha (go _ t₁₂) (go   _  t₂₃) p₁₂ p₂₃ = haha t₁₂ t₂₃ p₁₂ p₂₃
+  ↝-antisym : {exec : Γ₁ ⇶ Γ₂} → (e₁ e₂ : Event exec)
+            → (e₁ ↝ e₂) → (e₂ ↝ e₁) → (e₁ ≡ e₂)
+  ↝-antisym {exec = x₁ ∥ x₂} (inj₁ e₁) (inj₁ e₂) p₁₂ p₂₁ = Eq.cong inj₁ (↝-antisym e₁ e₂ p₁₂ p₂₁)
+  ↝-antisym {exec = x₁ ∥ x₂} (inj₂ e₁) (inj₂ e₂) p₁₂ p₂₁ = Eq.cong inj₂ (↝-antisym e₁ e₂ p₁₂ p₂₁)
+  ↝-antisym {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₁ e₂) p₁₂ p₂₁ = Eq.cong inj₁ (↝-antisym e₁ e₂ p₁₂ p₂₁)
+  ↝-antisym {exec = x₁ ⟫ x₂} (inj₂ e₁) (inj₂ e₂) p₁₂ p₂₁ = Eq.cong inj₂ (↝-antisym e₁ e₂ p₁₂ p₂₁)
+  ↝-antisym {exec = tick}   (inj₁ _) (inj₁ _) p₁₂ p₂₁ = Eq.cong inj₁ p₁₂
+  ↝-antisym {exec = tick}   (inj₂ _) (inj₂ _) p₁₂ p₂₁ = Eq.cong inj₂ p₁₂
+  ↝-antisym {exec = fork}   (inj₁ _) (inj₁ _) p₁₂ p₂₁ = Eq.cong inj₁ p₁₂
+  ↝-antisym {exec = fork}   (inj₂ _) (inj₂ _) p₁₂ p₂₁ = Eq.cong inj₂ p₁₂
+  ↝-antisym {exec = join}   (inj₁ _) (inj₁ _) p₁₂ p₂₁ = Eq.cong inj₁ p₁₂
+  ↝-antisym {exec = join}   (inj₂ _) (inj₂ _) p₁₂ p₂₁ = Eq.cong inj₂ p₁₂
+  ↝-antisym {exec = term}   (inj₁ _) (inj₁ _) p₁₂ p₂₁ = Eq.cong inj₁ p₁₂
+  ↝-antisym {exec = init}   (inj₂ _) (inj₂ _) p₁₂ p₂₁ = Eq.cong inj₂ p₁₂
+  ↝-antisym {exec = perm σ} (inj₁ _) (inj₁ _) p₁₂ p₂₁ = Eq.cong inj₁ p₁₂
+  ↝-antisym {exec = perm σ} (inj₂ _) (inj₂ _) p₁₂ p₂₁ = Eq.cong inj₂ p₁₂
 
   _↝∘_ : {exec : Γ₁ ⇶ Γ₂} {e₁ e₂ e₃ : Event exec}
        → (e₁ ↝ e₂) → (e₂ ↝ e₃) → (e₁ ↝ e₃)
-  proj₁ ((t₁₂ , _  ) ↝∘ (t₂₃ , _  ))
-    = t₁₂ ⋯∘ t₂₃
-  proj₂ ((t₁₂ , p₁₂) ↝∘ (t₂₃ , p₂₃))
-    = haha t₁₂ t₂₃ p₁₂ p₂₃
-
-  ↝-refl : {exec : Γ₁ ⇶ Γ₂}
-         → (e : Event exec)
-         → (e ↝ e)
-  proj₁ (↝-refl (t , s)) = ⋯-refl t
-  proj₂ (↝-refl (t , s)) = Eq.subst (λ z → Spanning[ z ] s s) (quux t) Eq.refl
-
-
-  ↝-antisym : {exec : Γ₁ ⇶ Γ₂}
-            → {t₁ t₂ : Cut exec}
-            → {s₁    : Cut.Site t₁}
-            → {   s₂ : Cut.Site t₂}
-            → ((t₁ , s₁) ↝ (t₂ , s₂))
-            → ((t₂ , s₂) ↝ (t₁ , s₁))
-            → ((t₁ Event., s₁) ≡ (t₂ Event., s₂))
-  ↝-antisym (t₁₂ , p₁₂) (t₂₁ , _) =
-      Event.eq (⋯-antisym t₁₂ t₂₁) λ{Eq.refl → hah? t₁₂ p₁₂}
-    where
-      hah? : {exec : Γ₁ ⇶ Γ₂}
-           → {t : Cut exec}
-           → {s₁ s₂ : Cut.Site t}
-           → (t₁₂ : t ⋯ t)
-           → (p₁₂ : Spanning[ during[ t₁₂ ] ] s₁ s₂)
-           → s₁ ≡ s₂
-      hah? (init _ _)   Eq.refl = Eq.refl
-      hah? (go   _ t₁₁) p₁₂     = hah? t₁₁ p₁₂
-
-  ↝-trans = _↝∘_
-
-
-  hehe∘haha : {exec : Γ₁ ⇶ Γ₂}
-            → {t₁ t₂ t₃ : Cut exec}
-            → {s₁          : Cut.Site t₁}
-            → {   s₂       : Cut.Site t₂}
-            → {      s₃    : Cut.Site t₃}
-            → {         s₄ : Site Γ₂}
-            → (t₁₂ : t₁ ⋯ t₂)
-            → (t₂₃ : t₂ ⋯ t₃)
-            → (p₁₂ : Spanning[ during[ t₁₂  ] ] s₁ s₂)
-            → (p₂₃ : Spanning[ during[  t₂₃ ] ] s₂ s₃)
-            → (p₃₄ : Spanning[  after[   t₃ ] ] s₃ s₄)
-            → hehe (t₁₂ ⋯∘ t₂₃) (haha t₁₂ t₂₃ p₁₂ p₂₃) p₃₄
-            ≡ hehe t₁₂ p₁₂ (hehe t₂₃ p₂₃ p₃₄)
-  hehe∘haha       t₁₂  (init _ _) p₁₂ p₂₃ Eq.refl
-    = Eq.refl
-  hehe∘haha (go _ t₁₂) (go _ t₂₃) p₁₂ p₂₃ (sᵢ , p₃ᵢ , pᵢ₄)
-    = Eq.cong (λ ▢ → (sᵢ , ▢ , pᵢ₄))
-              (hehe∘haha t₁₂ t₂₃ p₁₂ p₂₃ p₃ᵢ)
-
-  haha∘haha : {exec : Γ₁ ⇶ Γ₂}
-            → {t₁ t₂ t₃ t₄ : Cut exec}
-            → {s₁          : Cut.Site t₁}
-            → {   s₂       : Cut.Site t₂}
-            → {      s₃    : Cut.Site t₃}
-            → {         s₄ : Cut.Site t₄}
-            → (t₁₂ : t₁ ⋯ t₂)
-            → (t₂₃ : t₂ ⋯ t₃)
-            → (t₃₄ : t₃ ⋯ t₄)
-            → (p₁₂ : Spanning[ during[ t₁₂   ] ] s₁ s₂)
-            → (p₂₃ : Spanning[ during[  t₂₃  ] ] s₂ s₃)
-            → (p₃₄ : Spanning[ during[   t₃₄ ] ] s₃ s₄)
-            → haha (t₁₂ ⋯∘ t₂₃) t₃₄ (haha t₁₂ t₂₃ p₁₂ p₂₃) p₃₄
-            ≡[ Eq.cong (λ z → Spanning[ during[ z ] ] s₁ s₄)
-                  (⋯∘-assoc t₁₂ t₂₃ t₃₄)
-            ] haha t₁₂ (t₂₃ ⋯∘ t₃₄) p₁₂ (haha t₂₃ t₃₄ p₂₃ p₃₄)
-  haha∘haha       t₁₂        t₂₃  (init t₃ t₄)
-                  p₁₂        p₂₃  p₃₄
-    = hehe∘haha t₁₂ t₂₃ p₁₂ p₂₃ p₃₄
-  haha∘haha (go _ t₁₂) (go _ t₂₃) (go _ t₃₄)
-                  p₁₂        p₂₃        p₃₄
-    = DEq.hom (Eq.cong-∘ (⋯∘-assoc t₁₂ t₂₃ t₃₄))
-              (haha∘haha t₁₂ t₂₃ t₃₄ p₁₂ p₂₃ p₃₄)
-
-  -- With deepest gratitude to an archived Reddit comment by Jannis Limperg.
-  -- https://old.reddit.com/r/agda/comments/ax9rnx/help_with_equality_of_dependent_records/ehu86iv/
-  ↝-eq : {exec : Γ₁ ⇶ Γ₂}
-       → {t₁ t₂ : Cut exec}
-       → {s₁    : Cut.Site t₁}
-       → {   s₂ : Cut.Site t₂}
-       → {ord₁  : t₁ ⋯ t₂}
-       → {path₁ : Spanning[ during[ ord₁ ] ] s₁ s₂}
-       → {ord₂  : t₁ ⋯ t₂}
-       → {path₂ : Spanning[ during[ ord₂ ] ] s₁ s₂}
-       → (x : ord₁ ≡ ord₂)
-       → (y : path₁ ≡[ Eq.cong (λ ▢ → Spanning[ during[ ▢ ] ] _ _) x ] path₂)
-       → (ord₁ Data.Product., path₁) ≡ (ord₂ Data.Product., path₂)
-  ↝-eq Eq.refl Eq.refl = Eq.refl
+  _↝∘_ {exec = exec} = ↝-trans {exec = exec} _ _ _
 
   ↝∘-assoc : {exec : Γ₁ ⇶ Γ₂}
-           → {t₁ t₂ t₃ t₄ : Event exec}
-           → (p₁₂ : t₁ ↝ t₂)
-           → (p₂₃ : t₂ ↝ t₃)
-           → (p₃₄ : t₃ ↝ t₃)
-           → (p₁₂ ↝∘  p₂₃) ↝∘ p₃₄
-           ≡  p₁₂ ↝∘ (p₂₃  ↝∘ p₃₄)
-  ↝∘-assoc (t₁₂ , p₁₂) (t₂₃ , p₂₃) (t₃₄ , p₃₄)
-    = ↝-eq (⋯∘-assoc t₁₂ t₂₃ t₃₄)
-           (haha∘haha t₁₂ t₂₃ t₃₄ p₁₂ p₂₃ p₃₄)
+           → (e₁ e₂ e₃ e₄ : Event exec)
+           → (p₁₂ : e₁ ↝ e₂)
+           → (p₂₃ : e₂ ↝ e₃)
+           → (p₃₄ : e₃ ↝ e₄)
+           → (↝-trans e₁ e₃ e₄ (↝-trans e₁ e₂ e₃ p₁₂ p₂₃) p₃₄)
+           ≡ (↝-trans e₁ e₂ e₄ p₁₂ (↝-trans e₂ e₃ e₄ p₂₃ p₃₄))
+  ↝∘-assoc {exec = x₁ ∥ x₂} (inj₁ e₁) (inj₁ e₂) (inj₁ e₃) (inj₁ e₄) p₁₂ p₂₃ p₃₄ =
+    ↝∘-assoc e₁ e₂ e₃ e₄ p₁₂ p₂₃ p₃₄
+  ↝∘-assoc {exec = x₁ ∥ x₂} (inj₂ e₁) (inj₂ e₂) (inj₂ e₃) (inj₂ e₄) p₁₂ p₂₃ p₃₄ =
+    ↝∘-assoc e₁ e₂ e₃ e₄ p₁₂ p₂₃ p₃₄
+  --
+  ↝∘-assoc {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₁ e₂) (inj₁ e₃) (inj₁ e₄) p₁₂ p₂₃ p₃₄ =
+   ↝∘-assoc e₁ e₂ e₃ e₄ p₁₂ p₂₃ p₃₄
+  ↝∘-assoc {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₁ e₂) (inj₁ e₃) (inj₂ e₄) p₁₂ p₂₃ (sₘ , p₃ₘ , pₘ₄) =
+    Eq.cong (λ ▢ → (_ , ▢ , _))
+      (↝∘-assoc e₁ e₂ e₃ _ p₁₂ p₂₃ p₃ₘ)
+  ↝∘-assoc {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₁ e₂) (inj₂ e₃) (inj₂ e₄) p₁₂ p₂₃ p₃₄ =
+    Eq.refl
+  ↝∘-assoc {exec = x₁ ⟫ x₂} (inj₁ e₁) (inj₂ e₂) (inj₂ e₃) (inj₂ e₄) (sₘ , p₁ₘ , pₘ₂) p₂₃ p₃₄ =
+    Eq.cong (λ ▢ → _ , _ , ▢)
+      (↝∘-assoc _ e₂ e₃ e₄ pₘ₂ p₂₃ p₃₄)
+  ↝∘-assoc {exec = x₁ ⟫ x₂} (inj₂ e₁) (inj₂ e₂) (inj₂ e₃) (inj₂ e₄) p₁₂ p₂₃ p₃₄ =
+    ↝∘-assoc e₁ e₂ e₃ e₄ p₁₂ p₂₃ p₃₄
+  --
+  ↝∘-assoc {exec = tick} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₁ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  ↝∘-assoc {exec = tick} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = tick} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = tick} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = tick} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  --
+  ↝∘-assoc {exec = fork} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₁ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  ↝∘-assoc {exec = fork} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = fork} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = fork} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = fork} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  --
+  ↝∘-assoc {exec = join} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₁ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  ↝∘-assoc {exec = join} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = join} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = join} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.refl
+  ↝∘-assoc {exec = join} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  --
+  ↝∘-assoc {exec = init} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  ↝∘-assoc {exec = term} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₁ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂ {p₂₃} {p₃₄}
+  --
+  ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₁ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂
+  ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ =
+    Eq.trans (Eq.cong (λ ▢ → Eq.trans ▢ p₃₄) (Eq.sym (Eq.trans-cong p₁₂)))
+    (Eq.trans-assoc (Eq.cong (Tree.‵index σ) p₁₂))
+  ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ =
+    Eq.trans-assoc (Eq.cong (Tree.‵index σ) p₁₂)
+  ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂
+  ↝∘-assoc {exec = perm σ} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂
 ```

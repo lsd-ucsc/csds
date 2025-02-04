@@ -26,7 +26,7 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
   -- but also a merge of a sender's row into a receiver's row, to model that
   -- the receiver now observes anything that the sender observed at the time
   -- the message was sent.
-  module WB where
+  module WB (𝟘 : Pid) where
     open import Data.Unit
       using (⊤)
     open import Data.Product
@@ -45,7 +45,7 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
 
     open import Clock.Interpret
       as Interpret
-      using (Step; act; merge)
+      using (Step; start; act; merge)
     open import Clock.Monotonicity
       as Monotonicity
       using (Clock)
@@ -60,6 +60,9 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
     (_ , t₁) ⊑ (_ , t₂) = ∀ c → t₁ c ≤ t₂ c
 
     alg : Step ⊤ Time → Time
+    -- The use of a specified pid 𝟘 here is a wart of the model,
+    -- and is not at all fundamental to the WB-matrix algorithm.
+    alg start = 𝟘 , λ (_ , _) → 0
     alg (act _ (self , t)) = self , λ c →
       if does ((≡-dec _≟_ _≟_) (self , self) c)
         then 1 + t c
@@ -74,7 +77,7 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
     ≤-trans clock _ _ _ t₁≤t₂ t₂≤t₃ = λ s → ℕ-Prop.≤-trans (t₁≤t₂ s) (t₂≤t₃ s)
     act-mono clock _ (self , _) c with (≡-dec _≟_ _≟_) (self , self) c
     ... | false because _ = ℕ-Prop.≤-refl
-    ... | true  because _ = ℕ-Prop.≤-step ℕ-Prop.≤-refl
+    ... | true  because _ = ℕ-Prop.m≤n⇒m≤1+n ℕ-Prop.≤-refl
     merge-mono¹ clock (s , t₁) (r , t₂) (i , j) with j ≟ r
     ... | false because _ = ℕ-Prop.m≤m⊔n _ _
     ... | true  because _ = ℕ-Prop.≤-trans (ℕ-Prop.m≤m⊔n _ _) (ℕ-Prop.m≤n⊔m (t₁ (i , s)) _)

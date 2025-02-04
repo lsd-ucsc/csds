@@ -38,7 +38,7 @@ module Clock.Classifier
 
   open import Clock.Interpret
     as Interpret
-    using (Step; act; merge)
+    using (Step; start; act; merge)
   open import Clock.Monotonicity
     as Monotonicity
     using (Clock)
@@ -50,6 +50,8 @@ module Clock.Classifier
   Time = Cls → ℕ
 
   alg : Step Act Time → Time
+  -- The clock starts measuring at zero.
+  alg start = λ c → ℕ.zero
   -- The increment operation adds one to the class of the associated action.
   alg (act a t) = λ c →
     if does (cls a ≟ c)
@@ -75,7 +77,7 @@ module Clock.Classifier
   -- The clock operations are increasing on _⊑_:
   (act-mono    clock) a _ s with cls a ≟ s
   ... | false because _     = ℕ-Prop.≤-refl
-  ... | true  because _     = ℕ-Prop.≤-step ℕ-Prop.≤-refl
+  ... | true  because _     = ℕ-Prop.m≤n⇒m≤1+n ℕ-Prop.≤-refl
   (merge-mono¹ clock) _ _ _ = ℕ-Prop.m≤m⊔n _ _
   (merge-mono² clock) _ _ _ = ℕ-Prop.m≤n⊔m _ _
 

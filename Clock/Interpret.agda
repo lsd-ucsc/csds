@@ -11,58 +11,38 @@ module Clock.Interpret where
     as Sites
     using (Tree; Site; _∗_)
   open import Execution.Core
-    using (perm; tick; fork; join)
-    using (_⇶[_]_; _⇶_; id; _∥_; _⟫_)
+    using (_⇶_; perm; tick; fork; join; init; term; _⟫_; _∥_; id)
     using (Event; Tick)
   open import Execution.Causality
     as HB
-    using ()
-  open Event
-    using (_,_)
+    using (TrailingEvent[_,_]; LeadingEvent[_,_])
 
   variable
     T : Type
     Γ Γ₁ Γ₂ Γ₃ Γ₄ : Tree (Tree T)
     Action State : Type
 
-  Valuation : Type → Tree (Tree T) → Type
-  Valuation State Γ = Site Γ → State
-
-  par : Valuation State Γ₁ → Valuation State Γ₂ → Valuation State (Γ₁ ∗ Γ₂)
-  par f g (Site.thereˡ _ ix) = f ix
-  par f g (Site.thereʳ _ ix) = g ix
-
-  left : Valuation State (Γ₁ ∗ Γ₂) → Valuation State Γ₁
-  left f = f ∘ Site.thereˡ _
-
-  right : Valuation State (Γ₁ ∗ Γ₂) → Valuation State Γ₂
-  right f = f ∘ Site.thereʳ _
-
-  _⊗_ : (Valuation State Γ₁        → Valuation State Γ₂       )
-      → (Valuation State       Γ₃  → Valuation State       Γ₄ )
-      → (Valuation State (Γ₁ ∗ Γ₃) → Valuation State (Γ₂ ∗ Γ₄))
-  (f ⊗ g) x = par (f (left x)) (g (right x))
-
   data Step (Action State : Type) : Type where
+    start :                  Step Action State
     act   : Action → State → Step Action State
     merge : State  → State → Step Action State
 
   -- Given an algebra on steps, we can specify computations
   -- on replicas across spatially-distributed sites.
   module _ (alg : Step Action State → State) where
-    apply : ∀{k} (exec : Γ₁ ⇶[ k ] Γ₂) (acts : Tick exec → Action)
-          → (Valuation State Γ₁ → Valuation State Γ₂)
-    apply  id   acts   = Function.id
-    apply (perm σ) _ f = f ∘ Sites.‵index (Sites.‵sym σ)
-    apply  fork    _ f = Function.const (f Site.here)
-    apply  tick acts f = Function.const (alg (act (acts _) (f Site.here)))
-    apply  join    _ f = Function.const (alg (merge (f (Site.thereˡ _ Site.here))
-                                                    (f (Site.thereʳ _ Site.here)) ))
-    apply (  left ∥  right) acts = apply left   (acts ∘ inj₁) ⊗ apply right  (acts ∘ inj₂)
-    apply (prefix ⟫ suffix) acts = apply suffix (acts ∘ inj₂) ∘ apply prefix (acts ∘ inj₁)
-
-    timestamp : {exec : Γ₁ ⇶ Γ₂}
-              → (Tick exec → Action)
-              → Valuation State Γ₁
-              → (Event exec → State)
-    timestamp acts init (t , s) = apply (HB.before[ t ]) (acts ∘ HB.tliftˡ t) init s
+    timestamp : (exec : Γ₁ ⇶ Γ₂) (acts : Tick exec → Action)
+              → (Site Γ₁ → State) → (Event exec → State)
+    timestamp (x₁ ∥ x₂) acts inputs (inj₁ e) = timestamp x₁ (acts ∘ inj₁) (inputs ∘ Site.thereˡ _) e
+    timestamp (x₁ ∥ x₂) acts inputs (inj₂ e) = timestamp x₂ (acts ∘ inj₂) (inputs ∘ Site.thereʳ _) e
+    timestamp (x₁ ⟫ x₂) acts inputs (inj₁ e) = timestamp x₁ (acts ∘ inj₁) inputs e
+    timestamp (x₁ ⟫ x₂) acts inputs (inj₂ e) = timestamp x₂ (acts ∘ inj₂) (timestamp x₁ (acts ∘ inj₁) inputs ∘ LeadingEvent[ x₁ ,_]) e
+    timestamp tick acts inputs (inj₁ s) = inputs s
+    timestamp tick acts inputs (inj₂ s) = alg (act (acts _) (inputs Site.here))
+    timestamp fork acts inputs (inj₁ s) = inputs s
+    timestamp fork acts inputs (inj₂ s) = inputs Site.here
+    timestamp join acts inputs (inj₁ s) = inputs s
+    timestamp join acts inputs (inj₂ s) = alg (merge (inputs (Site.thereˡ _ Site.here)) (inputs (Site.thereʳ _ Site.here)))
+    timestamp term acts inputs (inj₁ s) = inputs s
+    timestamp init acts inputs (inj₂ s) = alg start
+    timestamp (perm σ) acts inputs (inj₁ s) = inputs s
+    timestamp (perm σ) acts inputs (inj₂ s) = inputs (Sites.‵index (Sites.‵sym σ) s)
