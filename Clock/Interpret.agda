@@ -5,17 +5,20 @@ open import Agda.Primitive
 module Clock.Interpret where
   open import Function
     using (_∘_)
+  open import Data.Unit
+    using (⊤; tt)
+  open import Data.Product
+    using (_×_; _,_)
   open import Data.Sum
     using (inj₁; inj₂)
   open import Execution.Sites
     as Sites
-    using (Tree; Site; _∗_)
+    using (Tree; Site; ∅; leaf; _∗_)
   open import Execution.Core
-    using (_⇶_; perm; tick; fork; join; init; term; _⟫_; _∥_; id)
-    using (Event; Tick)
+    using (_⇶_; perm; tick; fork; join; init; term; _⟫_; _∥_)
+    using (Event)
   open import Execution.Causality
-    as HB
-    using (TrailingEvent[_,_]; LeadingEvent[_,_])
+    using (LeadingEvent[_,_])
 
   variable
     T : Type
@@ -27,22 +30,56 @@ module Clock.Interpret where
     act   : Action → State → Step Action State
     merge : State  → State → Step Action State
 
+  module _ (State : Type) where
+    Timestamped : Tree (Tree T) → Type
+    Timestamped ∅ = ⊤
+    Timestamped (leaf _) = State
+    Timestamped (Γ₁ ∗ Γ₂) = Timestamped Γ₁ × Timestamped Γ₂
+
+  timestamped : {Γ : Tree (Tree T)} → Timestamped State Γ → (Site Γ → State)
+  timestamped ts          Site.here         = ts
+  timestamped (ts₁ , ts₂) (Site.thereˡ _ s) = timestamped ts₁ s
+  timestamped (ts₁ , ts₂) (Site.thereʳ _ s) = timestamped ts₂ s
+
+  timestamped⁻¹ : {Γ : Tree (Tree T)} → (Site Γ → State) → Timestamped State Γ
+  timestamped⁻¹ {Γ = ∅}       ts = tt
+  timestamped⁻¹ {Γ = leaf Γ}  ts = ts Site.here
+  timestamped⁻¹ {Γ = Γ₁ ∗ Γ₂} ts = (timestamped⁻¹ (ts ∘ Site.thereˡ _) , timestamped⁻¹ (ts ∘ Site.thereʳ _))
+
+  module _ (Action : Type) where
+    Stepped : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+    Stepped (x₁ ∥ x₂) = Stepped x₁ × Stepped x₂
+    Stepped (x₁ ⟫ x₂) = Stepped x₁ × Stepped x₂
+    Stepped tick = Action
+    Stepped fork = ⊤
+    Stepped join = ⊤
+    Stepped init = ⊤
+    Stepped term = ⊤
+    Stepped (perm σ) = ⊤
+
   -- Given an algebra on steps, we can specify computations
   -- on replicas across spatially-distributed sites.
-  module _ (alg : Step Action State → State) where
-    timestamp : (exec : Γ₁ ⇶ Γ₂) (acts : Tick exec → Action)
-              → (Site Γ₁ → State) → (Event exec → State)
-    timestamp (x₁ ∥ x₂) acts inputs (inj₁ e) = timestamp x₁ (acts ∘ inj₁) (inputs ∘ Site.thereˡ _) e
-    timestamp (x₁ ∥ x₂) acts inputs (inj₂ e) = timestamp x₂ (acts ∘ inj₂) (inputs ∘ Site.thereʳ _) e
-    timestamp (x₁ ⟫ x₂) acts inputs (inj₁ e) = timestamp x₁ (acts ∘ inj₁) inputs e
-    timestamp (x₁ ⟫ x₂) acts inputs (inj₂ e) = timestamp x₂ (acts ∘ inj₂) (timestamp x₁ (acts ∘ inj₁) inputs ∘ LeadingEvent[ x₁ ,_]) e
-    timestamp tick acts inputs (inj₁ s) = inputs s
-    timestamp tick acts inputs (inj₂ s) = alg (act (acts _) (inputs Site.here))
-    timestamp fork acts inputs (inj₁ s) = inputs s
-    timestamp fork acts inputs (inj₂ s) = inputs Site.here
-    timestamp join acts inputs (inj₁ s) = inputs s
-    timestamp join acts inputs (inj₂ s) = alg (merge (inputs (Site.thereˡ _ Site.here)) (inputs (Site.thereʳ _ Site.here)))
-    timestamp term acts inputs (inj₁ s) = inputs s
-    timestamp init acts inputs (inj₂ s) = alg start
-    timestamp (perm σ) acts inputs (inj₁ s) = inputs s
-    timestamp (perm σ) acts inputs (inj₂ s) = inputs (Sites.‵index (Sites.‵sym σ) s)
+  module _ {Action State : Type} (alg : Step Action State → State) where
+      apply : (exec : Γ₁ ⇶ Γ₂) (acts : Stepped Action exec)
+            → Timestamped State Γ₁ → Timestamped State Γ₂
+      timestamp : (exec : Γ₁ ⇶ Γ₂) (acts : Stepped Action exec)
+                → Timestamped State Γ₁ → (Event exec → State)
+
+      apply exec acts ts = timestamped⁻¹ (timestamp exec acts ts ∘ LeadingEvent[ exec ,_])
+
+      timestamp (x₁ ∥ x₂) (acts , _) (ts , _) (inj₁ e) = timestamp x₁ acts ts e
+      timestamp (x₁ ∥ x₂) (_ , acts) (_ , ts) (inj₂ e) = timestamp x₂ acts ts e
+      timestamp (x₁ ⟫ x₂) (acts , _)      ts  (inj₁ e) = timestamp x₁ acts ts e
+      timestamp (x₁ ⟫ x₂) (acts₁ , acts₂) ts  (inj₂ e) = timestamp x₂ acts₂ (apply x₁ acts₁ ts) e
+      -- trailing events
+      timestamp tick      _               ts  (inj₁ s) = timestamped ts s
+      timestamp fork      _               ts  (inj₁ s) = timestamped ts s
+      timestamp join      _               ts  (inj₁ s) = timestamped ts s
+      timestamp term      _               ts  (inj₁ s) = timestamped ts s
+      timestamp (perm _)  _               ts  (inj₁ s) = timestamped ts s
+      -- leading events
+      timestamp tick      action          t   (inj₂ s) = alg (act action t)
+      timestamp fork      _               t   (inj₂ s) = t
+      timestamp join      _        (t₁ , t₂)  (inj₂ s) = alg (merge t₁ t₂)
+      timestamp init      _               _   (inj₂ s) = alg start
+      timestamp (perm σ)  _               ts  (inj₂ s) = timestamped ts (Sites.‵index (Sites.‵sym σ) s)
