@@ -9,6 +9,8 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
     using (_×_)
   open import Data.Product.Properties
     using (≡-dec)
+  open import Data.Nat
+    using (ℕ; _≤_)
 
   -- A Raynal-Schiper-Toueg matrix clock classifies actions by a tuple
   -- of sender and recipient. This forms a table of quantities, one for
@@ -26,7 +28,9 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
   -- but also a merge of a sender's row into a receiver's row, to model that
   -- the receiver now observes anything that the sender observed at the time
   -- the message was sent.
-  module WB (𝟘 : Pid) where
+  module WB (sum : (Pid → ℕ) → ℕ) (sum-pf : (t : Pid → ℕ) → (i : Pid) → t i ≤ sum t) where
+    open import Function
+      using (_∘_)
     open import Data.Unit
       using (⊤)
     open import Data.Product
@@ -52,38 +56,42 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
     open Clock
       using (≤-refl; ≤-trans; act-mono; merge-mono¹; merge-mono²)
 
-    -- A local process ID, together with a timestamp.
-    Time = Pid × ((Pid × Pid) → ℕ)
+    Time = (Pid × Pid) → ℕ
 
-    -- Ignore the process ID when comparing.
     _⊑_ : Time → Time → Type
-    (_ , t₁) ⊑ (_ , t₂) = ∀ c → t₁ c ≤ t₂ c
+    t₁ ⊑ t₂ = ∀ c → t₁ c ≤ t₂ c
 
-    alg : Step ⊤ Time → Time
-    -- The use of a specified pid 𝟘 here is a wart of the model,
-    -- and is not at all fundamental to the WB-matrix algorithm.
-    alg start = 𝟘 , λ (_ , _) → 0
-    alg (act _ (self , t)) = self , λ c →
-      if does ((≡-dec _≟_ _≟_) (self , self) c)
-        then 1 + t c
-        else 0 + t c
-    alg (merge (s , t₁) (r , t₂)) = r ,  λ (i , j) →
-      if does (j ≟ r)
-        then t₁ (i , s) ⊔ (t₁ (i , j) ⊔ t₂ (i , j))
-        else 0          ⊔ (t₁ (i , j) ⊔ t₂ (i , j))
+    propagate-to : Pid → Time → Time
+    propagate-to self t = λ (i , j) →
+      if does (j ≟ self)
+        then sum (t ∘ (i ,_))
+        else (t ∘ (i ,_)) j
+
+    alg : Step Pid Time → Time
+    alg start = λ (_ , _) → 0
+    alg (act self t) =
+      let t' = propagate-to self t
+      in λ c →
+        if does ((≡-dec _≟_ _≟_) c (self , self))
+          then 1 + t' c
+          else 0 + t' c
+    alg (merge t₁ t₂) = λ c →
+      t₁ c ⊔ t₂ c
+
+
+    propagate-to-mono : ∀ p t → (∀ c → t c ≤ propagate-to p t c)
+    propagate-to-mono self t (i , j) with j ≟ self
+    ... | false because _ = ℕ-Prop.≤-refl
+    ... | true  because _ = sum-pf (t ∘ (i ,_)) j
 
     clock : Clock alg _⊑_
     ≤-refl clock _ _ = ℕ-Prop.≤-refl
     ≤-trans clock _ _ _ t₁≤t₂ t₂≤t₃ = λ s → ℕ-Prop.≤-trans (t₁≤t₂ s) (t₂≤t₃ s)
-    act-mono clock _ (self , _) c with (≡-dec _≟_ _≟_) (self , self) c
-    ... | false because _ = ℕ-Prop.≤-refl
-    ... | true  because _ = ℕ-Prop.m≤n⇒m≤1+n ℕ-Prop.≤-refl
-    merge-mono¹ clock (s , t₁) (r , t₂) (i , j) with j ≟ r
-    ... | false because _ = ℕ-Prop.m≤m⊔n _ _
-    ... | true  because _ = ℕ-Prop.≤-trans (ℕ-Prop.m≤m⊔n _ _) (ℕ-Prop.m≤n⊔m (t₁ (i , s)) _)
-    merge-mono² clock (s , t₁) (r , t₂) (i , j) with j ≟ r
-    ... | false because _ = ℕ-Prop.m≤n⊔m _ _
-    ... | true  because _ = ℕ-Prop.≤-trans (ℕ-Prop.m≤n⊔m _ _) (ℕ-Prop.m≤n⊔m (t₁ (i , s)) _)
+    act-mono clock self t c with (≡-dec _≟_ _≟_) c (self , self)
+    ... | false because _ = propagate-to-mono self t c
+    ... | true  because _ = ℕ-Prop.m≤n⇒m≤1+n (propagate-to-mono self t c)
+    merge-mono¹ clock t₁ t₂ (i , j) = ℕ-Prop.m≤m⊔n _ _
+    merge-mono² clock t₁ t₂ (i , j) = ℕ-Prop.m≤n⊔m _ _
 
     -- Obtain a global timestamping function for any execution.
     timestamp = Interpret.timestamp alg
