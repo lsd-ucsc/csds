@@ -16,6 +16,10 @@ module Execution.Sites where
 ```agda
   open import Function
     using (_∘_)
+  open import Data.Unit
+    using (⊤; tt)
+  open import Data.Product
+    using (_×_; _,_)
   open import Data.Nat
     as ℕ
     using (ℕ)
@@ -27,22 +31,19 @@ module Execution.Sites where
     using (_≡_)
 
   infix 6 _∗_
-
-  variable
-    T : Type
 ```
 
 </details>
 
 ```agda
-  data Tree (T : Type) : Type where
-    ∅    :                   Tree T
-    leaf : T      →          Tree T
-    _∗_  : Tree T → Tree T → Tree T
+  data Tree : Type where
+    ∅    :               Tree
+    site :               Tree
+    _∗_  : Tree → Tree → Tree
 
   -- Equivalence of trees up to balance and order,
   -- establishing ⟨Tree T / _≅_ , _∗_⟩ as a semigroup.
-  data _≅_ {T : Type} : (_ _ : Tree T) → Type where
+  data _≅_ : (_ _ : Tree) → Type where
     _‵∗_     : ∀{a₁ a₂ b₁ b₂} → (a₁ ≅ a₂) → (b₁ ≅ b₂) → ((a₁ ∗ b₁) ≅ (a₂ ∗ b₂))
 
     ‵trans   : ∀{a b c} → (a ≅ b) → (b ≅ c) → (a ≅ c)
@@ -58,13 +59,13 @@ module Execution.Sites where
 
   syntax ‵trans s₁ s₂ = s₁ ∘≅ s₂
 
-  ‵unitᵣ : (a : Tree T) → (a ∗ ∅) ≅  a
+  ‵unitᵣ : ∀ a → (a ∗ ∅) ≅  a
   ‵unitᵣ a = ‵trans (‵swap a ∅) (‵unitₗ a)
 
-  ‵unitᵣ⁻¹ : (a : Tree T) →  a      ≅ (a ∗ ∅)
+  ‵unitᵣ⁻¹ : ∀ a →  a ≅ (a ∗ ∅)
   ‵unitᵣ⁻¹ a = ‵trans (‵unitₗ⁻¹ a) (‵swap ∅ a)
 
-  ‵sym : {a b : Tree T} → (a ≅ b) → (b ≅ a)
+  ‵sym : ∀{a b} → (a ≅ b) → (b ≅ a)
   ‵sym (p ‵∗ q)         = ‵sym p ‵∗ ‵sym q
   ‵sym (‵trans   p q)   = ‵trans (‵sym q) (‵sym p)
   ‵sym (‵refl    _)     = ‵refl _
@@ -74,7 +75,7 @@ module Execution.Sites where
   ‵sym (‵unitₗ   a)     = ‵unitₗ⁻¹ a
   ‵sym (‵unitₗ⁻¹ a)     = ‵unitₗ a
 
-  ‶sym : {a b : Tree T} → (p : a ≅ b) → ‵sym (‵sym p) ≡ p
+  ‶sym : ∀{a b} → (p : a ≅ b) → ‵sym (‵sym p) ≡ p
   ‶sym (p ‵∗ q)         = Eq.cong₂ _‵∗_   (‶sym p) (‶sym q)
   ‶sym (‵trans   p q)   = Eq.cong₂ ‵trans (‶sym p) (‶sym q)
   ‶sym (‵refl    _)     = Eq.refl
@@ -84,12 +85,12 @@ module Execution.Sites where
   ‶sym (‵unitₗ   a)     = Eq.refl
   ‶sym (‵unitₗ⁻¹ a)     = Eq.refl
 
-  size : Tree T → ℕ
-  size Tree.∅              = 0
-  size (Tree.leaf atom)    = 1
-  size (left Tree.∗ right) = size left ℕ.+ size right
+  size : Tree → ℕ
+  size ∅       = 0
+  size site    = 1
+  size (a ∗ b) = size a ℕ.+ size b
 
-  ‵size : ∀{a b : Tree T} → (a ≅ b) → (size a ≡ size b)
+  ‵size : ∀{a b} → (a ≅ b) → (size a ≡ size b)
   ‵size (p ‵∗ q)         = Eq.cong₂ ℕ._+_ (‵size p) (‵size q)
   ‵size (‵trans   p q)   = Eq.trans (‵size p) (‵size q)
   ‵size (‵refl    _)     = Eq.refl
@@ -100,92 +101,163 @@ module Execution.Sites where
   ‵size (‵unitₗ⁻¹ a)     = Eq.refl
 
 
-  data Site {T : Type} : Tree T → Type where
-    here   : ∀{a}    →                  Site (leaf a)
+  Tree[_] : Tree → Type → Type
+  Tree[ ∅       ] L = ⊤
+  Tree[ site    ] L = L
+  Tree[ Γ₁ ∗ Γ₂ ] L = Tree[ Γ₁ ] L × Tree[ Γ₂ ] L
+
+  permute : ∀{L Γ₁ Γ₂} → (Γ₁ ≅ Γ₂) → (Tree[ Γ₁ ] L → Tree[ Γ₂ ] L)
+  permute (σ₁ ‵∗ σ₂)        (l₁ , l₂)        = (permute σ₁ l₁ , permute σ₂ l₂)
+  permute (‵trans   σ₁ σ₂)  l                = permute σ₂ (permute σ₁ l)
+  permute (‵refl    _)      l                = l
+  permute (‵swap    _ _)    (l₁ , l₂)        = (l₂ , l₁)
+  permute (‵assoc   _ _ _)  ((l₁ , l₂) , l₃) = (l₁ , (l₂ , l₃))
+  permute (‵assoc⁻¹ _ _ _)  (l₁ , (l₂ , l₃)) = ((l₁ , l₂) , l₃)
+  permute (‵unitₗ   _)      (_ , l)          = l
+  permute (‵unitₗ⁻¹ _)      l                = (tt , l)
+
+  map : ∀{L₁ L₂ Γ} → (f : L₁ → L₂) → (Tree[ Γ ] L₁ → Tree[ Γ ] L₂)
+  map {Γ = ∅}       f l         = tt
+  map {Γ = site}    f l         = f l
+  map {Γ = Γ₁ ∗ Γ₂} f (l₁ , l₂) = (map f l₁ , map f l₂)
+
+
+  data Site : Tree → Type where
+    here   :                            Site site
     thereˡ : ∀{l} r  → (ixˡ : Site l) → Site (l ∗ r)
     thereʳ : ∀ l {r} → (ixʳ : Site r) → Site (l ∗ r)
 
+  lookup : {L : Type} {Γ : Tree} → Tree[ Γ ] L → (Site Γ → L)
+  lookup {Γ = site}    l       s            = l
+  lookup {Γ = Γ₁ ∗ Γ₂} (l , _) (thereˡ _ s) = lookup l s
+  lookup {Γ = Γ₁ ∗ Γ₂} (_ , l) (thereʳ _ s) = lookup l s
+
+  tabulate : ∀{L} Γ → (Site Γ → L) → Tree[ Γ ] L
+  tabulate ∅         f = tt
+  tabulate site      f = f here
+  tabulate (Γ₁ ∗ Γ₂) f = (tabulate Γ₁ (f ∘ thereˡ _) , tabulate Γ₂ (f ∘ thereʳ _))
+
+  eigentree : ∀ Γ → Tree[ Γ ] (Site Γ)
+  eigentree Γ = tabulate Γ (λ s → s)
+
+  repeat : ∀{L} Γ → (l : L) → Tree[ Γ ] L
+  repeat Γ l = tabulate Γ (λ _ → l)
+
+  ‵index : {Γ₁ Γ₂ : Tree}
+         → (Γ₁ ≅ Γ₂)
+         → Site Γ₂ → Site Γ₁
+  ‵index σ = lookup (permute σ (eigentree _))
+
+
+  permute-sym : ∀{L Γ₁ Γ₂} → (σ : Γ₁ ≅ Γ₂) → (l : Tree[ Γ₁ ] L)
+              → permute (‵trans σ (‵sym σ)) l ≡ l
+  permute-sym (σ₁ ‵∗ σ₂)       (l₁ , l₂) =
+    Eq.cong₂ _,_ (permute-sym σ₁ l₁) (permute-sym σ₂ l₂)
+  permute-sym (‵trans σ₁ σ₂)   l = Eq.trans
+    (Eq.cong (permute (‵sym σ₁)) (permute-sym σ₂ (permute σ₁ l)))
+    (permute-sym σ₁ l)
+  permute-sym (‵refl    _)     _ = Eq.refl
+  permute-sym (‵swap    _ _)   _ = Eq.refl
+  permute-sym (‵assoc   _ _ _) _ = Eq.refl
+  permute-sym (‵assoc⁻¹ _ _ _) _ = Eq.refl
+  permute-sym (‵unitₗ   _)     _ = Eq.refl
+  permute-sym (‵unitₗ⁻¹ _)     _ = Eq.refl
+
+  permute-sym' : ∀{L Γ₁ Γ₂} → (σ : Γ₁ ≅ Γ₂) → (l : Tree[ Γ₂ ] L)
+              → permute (‵trans (‵sym σ) σ) l ≡ l
+  permute-sym' (σ₁ ‵∗ σ₂)       (l₁ , l₂) =
+    Eq.cong₂ _,_ (permute-sym' σ₁ l₁) (permute-sym' σ₂ l₂)
+  permute-sym' (‵trans σ₁ σ₂)   l = Eq.trans
+    (Eq.cong (permute σ₂) (permute-sym' σ₁ (permute (‵sym σ₂) l)))
+    (permute-sym' σ₂ l)
+  permute-sym' (‵refl    _)     _ = Eq.refl
+  permute-sym' (‵swap    _ _)   _ = Eq.refl
+  permute-sym' (‵assoc   _ _ _) _ = Eq.refl
+  permute-sym' (‵assoc⁻¹ _ _ _) _ = Eq.refl
+  permute-sym' (‵unitₗ   _)     _ = Eq.refl
+  permute-sym' (‵unitₗ⁻¹ _)     _ = Eq.refl
+
+  lookup-tabulate : ∀{L Γ} → (f : Site Γ → L)
+                  → ∀ s → lookup (tabulate Γ f) s ≡ f s
+  lookup-tabulate f here         = Eq.refl
+  lookup-tabulate f (thereˡ _ s) = lookup-tabulate (f ∘ thereˡ _) s
+  lookup-tabulate f (thereʳ _ s) = lookup-tabulate (f ∘ thereʳ _) s
+
+  tabulate-lookup : ∀{L Γ} → (l : Tree[ Γ ] L)
+                  → tabulate Γ (lookup {Γ = Γ} l) ≡ l
+  tabulate-lookup {Γ = ∅}       tt        = Eq.refl
+  tabulate-lookup {Γ = site}    l         = Eq.refl
+  tabulate-lookup {Γ = Γ₁ ∗ Γ₂} (l₁ , l₂) =
+    Eq.cong₂ _,_
+      (tabulate-lookup {Γ = Γ₁} l₁)
+      (tabulate-lookup {Γ = Γ₂} l₂)
+
+  map-permute : ∀{L₁ L₂ Γ₁ Γ₂} (σ : Γ₁ ≅ Γ₂) (l : Tree[ Γ₁ ] L₁) (f : L₁ → L₂)
+              → map f (permute σ l) ≡ permute σ (map f l)
+  map-permute (σ₁ ‵∗ σ₂) (l₁ , l₂) f = Eq.cong₂ _,_ (map-permute σ₁ l₁ f) (map-permute σ₂ l₂ f)
+  map-permute (‵trans σ₁ σ₂) l f = Eq.trans (map-permute σ₂ (permute σ₁ l) f) (Eq.cong (permute σ₂) (map-permute σ₁ l f))
+  map-permute (‵refl _) l f = Eq.refl
+  map-permute (‵swap a b) l f = Eq.refl
+  map-permute (‵assoc a b c) l f = Eq.refl
+  map-permute (‵assoc⁻¹ a b c) l f = Eq.refl
+  map-permute (‵unitₗ _) l f = Eq.refl
+  map-permute (‵unitₗ⁻¹ _) l f = Eq.refl
+
+  map-tabulate : ∀{L₁ L₂ : Type} {Γ} → (f : Site Γ → L₁) → (g : L₁ → L₂)
+               → map g (tabulate Γ f) ≡ tabulate Γ (g ∘ f)
+  map-tabulate {Γ = ∅}       f g = Eq.refl
+  map-tabulate {Γ = site}    f g = Eq.refl
+  map-tabulate {Γ = Γ₁ ∗ Γ₂} f g = Eq.cong₂ _,_ (map-tabulate (f ∘ thereˡ _) g) (map-tabulate (f ∘ thereʳ _) g)
+
+  map-lookup : ∀{L₁ L₂ : Type} {Γ} → (f : L₁ → L₂) → (l : Tree[ Γ ] L₁)
+             → ∀ s → f (lookup l s) ≡ lookup (map f l) s
+  map-lookup f l       here         = Eq.refl
+  map-lookup f (l , _) (thereˡ _ s) = map-lookup f l s
+  map-lookup f (_ , l) (thereʳ _ s) = map-lookup f l s
+
+  tabulate-eta : ∀{L} Γ → (f g : Site Γ → L)
+               → (∀ s → f s ≡ g s)
+               → tabulate Γ f ≡ tabulate Γ g
+  tabulate-eta ∅         f g p = Eq.refl
+  tabulate-eta site      f g p = p here
+  tabulate-eta (Γ₁ ∗ Γ₂) f g p = Eq.cong₂ _,_ (tabulate-eta Γ₁ _ _ (p ∘ thereˡ _)) (tabulate-eta Γ₂ _ _ (p ∘ thereʳ _))
+
+  permute-tabulate : ∀{L Γ₁ Γ₂} (σ : Γ₁ ≅ Γ₂) (f : Site Γ₁ → L)
+                   → tabulate Γ₂ (f ∘ ‵index σ) ≡ permute σ (tabulate Γ₁ f)
+  permute-tabulate {Γ₁ = Γ₁} {Γ₂ = Γ₂} σ f =
+    Eq.trans (Eq.trans (Eq.trans
+      (tabulate-eta Γ₂
+        (λ x → f (lookup (permute σ (tabulate Γ₁ (λ s → s))) x))
+        _
+        (λ s → map-lookup f (permute σ (tabulate Γ₁ (λ s → s))) s) )
+      (tabulate-lookup {Γ = Γ₂} (map f (permute σ (tabulate Γ₁ (λ s → s))))) )
+      (map-permute σ (tabulate Γ₁ (λ s → s)) f) )
+      (Eq.cong (permute σ) (map-tabulate (λ s → s) f))
+
   module _ where
-    ‵index : {Γ₁ Γ₂ : Tree T}
-           → (Γ₁ ≅ Γ₂)
-           → Site Γ₁ → Site Γ₂
-
-    ‵index (p ‵∗ q) (thereˡ _ ix) = thereˡ _ (‵index p ix)
-    ‵index (p ‵∗ q) (thereʳ _ ix) = thereʳ _ (‵index q ix)
-
-    ‵index (‵trans   p q) = ‵index q Function.∘ ‵index p
-    ‵index (‵refl    _)   = Function.id
-
-    ‵index (‵swap    _ _) (thereˡ _ ix) = thereʳ _ ix
-    ‵index (‵swap    _ _) (thereʳ _ ix) = thereˡ _ ix
-
-    ‵index (‵assoc   a b c) (thereˡ _ (thereˡ _ ix)) = thereˡ _           ix
-    ‵index (‵assoc   a b c) (thereˡ _ (thereʳ _ ix)) = thereʳ _ (thereˡ _ ix)
-    ‵index (‵assoc   a b c) (thereʳ _           ix ) = thereʳ _ (thereʳ _ ix)
-
-    ‵index (‵assoc⁻¹ a b c) (thereˡ _           ix ) = thereˡ _ (thereˡ _ ix)
-    ‵index (‵assoc⁻¹ a b c) (thereʳ _ (thereˡ _ ix)) = thereˡ _ (thereʳ _ ix)
-    ‵index (‵assoc⁻¹ a b c) (thereʳ _ (thereʳ _ ix)) = thereʳ _ ix
-
-    ‵index (‵unitₗ   a) (thereʳ _ ix) =          ix
-    ‵index (‵unitₗ⁻¹ a)           ix  = thereʳ _ ix
+    ‶index : {Γ₁ Γ₂ : Tree} (σ : Γ₁ ≅ Γ₂)
+           → (s : Site Γ₂)
+           → (‵index (‵sym σ) ∘ ‵index σ) s ≡ s
+    ‶index {Γ₁ = Γ₁} {Γ₂} σ s =
+      Eq.trans (Eq.trans (Eq.trans (Eq.trans (Eq.trans
+        (map-lookup (‵index (‵sym σ)) (permute σ (tabulate Γ₁ (λ ■ → ■))) s)
+        (Eq.cong (λ ▢ → lookup ▢ s)
+                 (map-permute σ (tabulate Γ₁ (λ ■ → ■)) (map (lookup (permute (‵sym σ) (tabulate Γ₂ (λ ■ → ■))))))) )
+        (Eq.cong (λ ▢ → lookup (permute σ ▢) s)
+                 (map-tabulate (λ ■ → ■) (lookup {Γ = Γ₁} (permute (‵sym σ) (tabulate Γ₂ (λ s₁ → s₁)))))) )
+        (Eq.cong (λ ▢ → lookup (permute σ ▢) s) (tabulate-lookup {Γ = Γ₁} (permute (‵sym σ) (tabulate Γ₂ (λ s₁ → s₁))))) )
+        (Eq.cong (λ ▢ → lookup ▢ s) (permute-sym' σ (tabulate Γ₂ λ ■ → ■))))
+        (lookup-tabulate (λ ■ → ■) s)
 
   module _ where
-    ‶index : {Γ₁ Γ₂ : Tree T} (p : Γ₁ ≅ Γ₂)
-           → (ix : Site Γ₁)
-           → (‵index (‵sym p) ∘ ‵index p) ix ≡ ix
-
-    ‶index (p ‵∗ _) (thereˡ _ ix) = Eq.cong (thereˡ _) (‶index p ix)
-    ‶index (_ ‵∗ q) (thereʳ _ ix) = Eq.cong (thereʳ _) (‶index q ix)
-
-    ‶index (‵trans p q) ix = Eq.trans (Eq.cong (‵index (‵sym p)) (‶index q (‵index p ix)))
-                                      (‶index p ix)
-
-    ‶index (‵refl _) _ = Eq.refl
-
-    ‶index (‵swap _ _) (thereˡ _ _) = Eq.refl
-    ‶index (‵swap _ _) (thereʳ _ _) = Eq.refl
-
-    ‶index (‵assoc _ _ _) (thereˡ _ (thereˡ _ _)) = Eq.refl
-    ‶index (‵assoc _ _ _) (thereˡ _ (thereʳ _ _)) = Eq.refl
-    ‶index (‵assoc _ _ _) (thereʳ _           _ ) = Eq.refl
-
-    ‶index (‵assoc⁻¹ _ _ _) (thereˡ _           _ ) = Eq.refl
-    ‶index (‵assoc⁻¹ _ _ _) (thereʳ _ (thereˡ _ _)) = Eq.refl
-    ‶index (‵assoc⁻¹ _ _ _) (thereʳ _ (thereʳ _ _)) = Eq.refl
-
-    ‶index (‵unitₗ   _) (thereʳ _ _) = Eq.refl
-    ‶index (‵unitₗ⁻¹ _)           _  = Eq.refl
-
-  lookup : {Γ : Tree T} → Site Γ → T
-  lookup (here {a})   = a
-  lookup (thereˡ _ x) = lookup x
-  lookup (thereʳ _ x) = lookup x
-
-  module _ where
-    ‵lookup : {Γ₁ Γ₂ : Tree T} (p : Γ₁ ≅ Γ₂)
-            → (ix : Site Γ₁)
-            → lookup ix ≡ lookup (‵index p ix)
-
-    ‵lookup (p ‵∗ _) (thereˡ _ ix) = ‵lookup p ix
-    ‵lookup (_ ‵∗ q) (thereʳ _ ix) = ‵lookup q ix
-
-    ‵lookup (‵trans p q) ix = Eq.trans (‵lookup p ix)
-                                       (‵lookup q (‵index p ix))
-
-    ‵lookup (‵refl _) _ = Eq.refl
-
-    ‵lookup (‵swap _ _) (thereˡ _ _) = Eq.refl
-    ‵lookup (‵swap _ _) (thereʳ _ _) = Eq.refl
-
-    ‵lookup (‵assoc _ _ _) (thereˡ _ (thereˡ _ _)) = Eq.refl
-    ‵lookup (‵assoc _ _ _) (thereˡ _ (thereʳ _ _)) = Eq.refl
-    ‵lookup (‵assoc _ _ _) (thereʳ _           _ ) = Eq.refl
-
-    ‵lookup (‵assoc⁻¹ _ _ _) (thereˡ _           _ ) = Eq.refl
-    ‵lookup (‵assoc⁻¹ _ _ _) (thereʳ _ (thereˡ _ _)) = Eq.refl
-    ‵lookup (‵assoc⁻¹ _ _ _) (thereʳ _ (thereʳ _ _)) = Eq.refl
-
-    ‵lookup (‵unitₗ   _) (thereʳ _ _) = Eq.refl
-    ‵lookup (‵unitₗ⁻¹ _)           _  = Eq.refl
+    ‵lookup : {L : Type} {Γ₁ Γ₂ : Tree} (σ : Γ₁ ≅ Γ₂)
+            → (l : Tree[ Γ₁ ] L)
+            → (s : Site Γ₂)
+            → lookup l (‵index σ s) ≡ lookup (permute σ l) s
+    ‵lookup {Γ₁ = Γ₁} σ l s =
+      Eq.trans (Eq.trans (Eq.trans
+        (map-lookup (lookup l) (permute σ (tabulate Γ₁ (λ ■ → ■))) s)
+        (Eq.cong (λ ▢ → lookup ▢ s) (map-permute σ (tabulate Γ₁ (λ ■ → ■)) (lookup l))) )
+        (Eq.cong (λ ▢ → lookup (permute σ ▢) s) (map-tabulate (λ ■ → ■) (lookup {Γ = Γ₁} l))) )
+        (Eq.cong (λ ▢ → lookup (permute σ ▢) s) (tabulate-lookup {Γ = Γ₁} l))
 ```

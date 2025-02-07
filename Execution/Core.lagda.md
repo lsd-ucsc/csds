@@ -29,23 +29,22 @@ module Execution.Core where
     using (_∘_)
   open import Execution.Sites
     as Sites
-    using (Tree; ∅; leaf; _∗_)
+    using (Tree; ∅; site; _∗_)
 
   variable
-    T : Type
     -- Sets of sites over which executions act
-    Γ  Γ₁ Γ₂ Γ₃ Γ₄ : Tree (Tree T)
+    Γ  Γ₁ Γ₂ Γ₃ Γ₄ : Tree
 
-  infix   5 _⇶_ _⇶[_]_
+  infix   5 _⇶_
 --infix   6 _∗_
-  infixl 15 _⟫_ _;_
-  infix  20 _∥_ _⊗_
+  infixl 15 _⟫_
+  infix  20 _∥_
 ```
 
 </details>
 
 ```agda
-  data _⇶_ {T : Type} : (Γ₁ Γ₂ : Tree (Tree T)) → Type where
+  data _⇶_ : (Γ₁ Γ₂ : Tree) → Type where
     -- concurrent composition
     _∥_ : (x  : Γ₁ ⇶ Γ₂)
         → (x' : Γ₃ ⇶ Γ₄)
@@ -57,56 +56,32 @@ module Execution.Core where
         → (Γ₁ ⇶ Γ₃)
 
     -- a local computation at a site
-    tick : ∀{a b} → leaf a          ⇶ leaf b
+    tick : site ⇶ site
 
     -- the factorization of one site into two
-    fork : ∀{a b} → leaf (a ∗ b)    ⇶ leaf a ∗ leaf b
+    fork : site ⇶ site ∗ site
 
     -- the assimilation of two sites into one
-    join : ∀{a b} → leaf a ∗ leaf b ⇶ leaf (a ∗ b)
+    join : site ∗ site ⇶ site
 
-    -- the creation of an empty site
-    init :                        ∅ ⇶ leaf ∅
+    -- the creation of a site
+    init : ∅ ⇶ site
 
-    -- the destruction of an empty site
-    term :                   leaf ∅ ⇶      ∅
+    -- the destruction of a site
+    term : site ⇶ ∅
 
     -- a permutation on sites
-    perm : ∀{a b} → (σ : a Sites.≅ b) → (a ⇶ b)
+    perm : ∀{Γ₁ Γ₂} → (σ : Γ₁ Sites.≅ Γ₂) → (Γ₁ ⇶ Γ₂)
 
   -- Helpers for extracting the type-level implicits from an execution
-  Ty[_] : {T : Type} {Γ₁ Γ₂ : Tree (Tree T)} (exec : Γ₁ ⇶ Γ₂) → Type
-  Ty[_] {T = T} exec = T
-
-  leading[_] : (exec : Γ₁ ⇶ Γ₂) → Tree (Tree Ty[ exec ])
+  leading[_] : (exec : Γ₁ ⇶ Γ₂) → Tree
   leading[_] {Γ₁ = Γ₁} exec = Γ₁
 
-  trailing[_] : (exec : Γ₁ ⇶ Γ₂) → Tree (Tree Ty[ exec ])
+  trailing[_] : (exec : Γ₁ ⇶ Γ₂) → Tree
   trailing[_] {Γ₂ = Γ₂} exec = Γ₂
 
 
-  data Layer : Type where
-    Permute : Layer
-    Compute : Layer
-
-  _⇶[_]_ : {T : Type} (Γ₁ : Tree (Tree T)) (k : Layer) (Γ₂ : Tree (Tree T)) → Type
-  Γ₁ ⇶[ Permute ] Γ₂ = Γ₁ Sites.≅ Γ₂
-  Γ₁ ⇶[ Compute ] Γ₂ = Γ₁ ⇶ Γ₂
-
-  id : ∀{k} → (Γ : Tree (Tree T)) → (Γ ⇶[ k ] Γ)
-  id {k = Permute} = Sites.‵refl
-  id {k = Compute} = perm ∘ id
-
-  _;_ : ∀{k} → (Γ₁ ⇶[ k ] Γ₂) → (Γ₂ ⇶[ k ] Γ₃) → (Γ₁ ⇶[ k ] Γ₃)
-  _;_ {k = Permute} = Sites.‵trans
-  _;_ {k = Compute} = _⟫_
-
-  _⊗_ : ∀{k} → (Γ₁ ⇶[ k ] Γ₂) → (Γ₃ ⇶[ k ] Γ₄) → (Γ₁ ∗ Γ₃ ⇶[ k ] Γ₂ ∗ Γ₄)
-  _⊗_ {k = Permute} = Sites._‵∗_
-  _⊗_ {k = Compute} = _∥_
-
-
-  Tick : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+  Tick : {Γ₁ Γ₂ : Tree} → (Γ₁ ⇶ Γ₂) → Type
   Tick (x ∥ y)  = Tick x ⊎ Tick y
   Tick (x ⟫ y)  = Tick x ⊎ Tick y
   Tick tick     = ⊤
@@ -117,7 +92,7 @@ module Execution.Core where
   Tick (perm σ) = ⊥
 
   -- A site at a time.
-  Event : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+  Event : {Γ₁ Γ₂ : Tree} → (Γ₁ ⇶ Γ₂) → Type
   Event                (x₁ ∥ x₂)     = Event x₁ ⊎ Event x₂
   Event                (x₁ ⟫ x₂)     = Event x₁ ⊎ Event x₂
   Event {Γ₁ = Γ₁} {Γ₂ = Γ₂} tick     = Sites.Site Γ₁ ⊎ Sites.Site Γ₂
