@@ -47,13 +47,13 @@ module Execution.Core where
 ```agda
   data _⇶_ {T : Type} : (Γ₁ Γ₂ : Tree (Tree T)) → Type where
     -- concurrent composition
-    _∥_ : (Γ₁ ⇶ Γ₂)
-        → (Γ₃ ⇶ Γ₄)
+    _∥_ : (x  : Γ₁ ⇶ Γ₂)
+        → (x' : Γ₃ ⇶ Γ₄)
         → (Γ₁ ∗ Γ₃ ⇶ Γ₂ ∗ Γ₄)
 
     -- sequential composition
-    _⟫_ : (Γ₁ ⇶ Γ₂)
-        → (Γ₂ ⇶ Γ₃)
+    _⟫_ : (x₁ : Γ₁ ⇶ Γ₂)
+        → (x₂ : Γ₂ ⇶ Γ₃)
         → (Γ₁ ⇶ Γ₃)
 
     -- a local computation at a site
@@ -106,7 +106,7 @@ module Execution.Core where
   _⊗_ {k = Compute} = _∥_
 
 
-  Tick : {T : Type} {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+  Tick : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
   Tick (x ∥ y)  = Tick x ⊎ Tick y
   Tick (x ⟫ y)  = Tick x ⊎ Tick y
   Tick tick     = ⊤
@@ -115,53 +115,6 @@ module Execution.Core where
   Tick init     = ⊥
   Tick term     = ⊥
   Tick (perm σ) = ⊥
-
-
-  module Cut where
-    Cut : (Γ₁ ⇶ Γ₂) → Type
-    Cut (x₁ ∥ x₂) = Cut x₁ × Cut x₂
-    Cut (x₁ ⟫ x₂) = Cut x₁ ⊎ Cut x₂
-    Cut tick      = ⊤ ⊎ ⊤
-    Cut fork      = ⊤ ⊎ ⊤
-    Cut join      = ⊤ ⊎ ⊤
-    Cut init      = ⊤ ⊎ ⊤
-    Cut term      = ⊤ ⊎ ⊤
-    Cut (perm _ ) = ⊤ ⊎ ⊤
-
-    Γ[_] : {exec : Γ₁ ⇶ Γ₂} → Cut exec → Tree (Tree Ty[ exec ])
-    Γ[_] {exec = x₁ ∥ x₂} (c₁ , c₂) = Γ[ c₁ ] ∗ Γ[ c₂ ]
-    Γ[_] {exec = x₁ ⟫ x₂} (inj₁ c₁) = Γ[ c₁ ]
-    Γ[_] {exec = x₁ ⟫ x₂} (inj₂ c₂) = Γ[ c₂ ]
-    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = tick}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
-    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = fork}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
-    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = join}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
-    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = init}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
-    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = term}   = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
-    Γ[_] {Γ₁ = Γ₁} {Γ₂ = Γ₂} {exec = perm σ} = Sum.[ (λ _ → Γ₁) , (λ _ → Γ₂) ]
-
-    Site : {exec : Γ₁ ⇶ Γ₂} → Cut exec → Type
-    Site c = Sites.Site Γ[ c ]
-  Cut = Cut.Cut
-
-  LeadingCut[_] : (exec : Γ₁ ⇶ Γ₂) → Cut exec
-  LeadingCut[ x₁ ∥ x₂ ] = (LeadingCut[ x₁ ] , LeadingCut[ x₂ ])
-  LeadingCut[ x₁ ⟫ x₂ ] = inj₂ (LeadingCut[ x₂ ])
-  LeadingCut[ tick   ]  = inj₂ tt
-  LeadingCut[ fork   ]  = inj₂ tt
-  LeadingCut[ join   ]  = inj₂ tt
-  LeadingCut[ init   ]  = inj₂ tt
-  LeadingCut[ term   ]  = inj₂ tt
-  LeadingCut[ perm _ ]  = inj₂ tt
-
-  TrailingCut[_] : (exec : Γ₁ ⇶ Γ₂) → Cut exec
-  TrailingCut[ x₁ ∥ x₂ ] = (TrailingCut[ x₁ ] , TrailingCut[ x₂ ])
-  TrailingCut[ x₁ ⟫ x₂ ] = inj₁ (TrailingCut[ x₁ ])
-  TrailingCut[ tick   ]  = inj₁ tt
-  TrailingCut[ fork   ]  = inj₁ tt
-  TrailingCut[ join   ]  = inj₁ tt
-  TrailingCut[ init   ]  = inj₁ tt
-  TrailingCut[ term   ]  = inj₁ tt
-  TrailingCut[ perm _ ]  = inj₁ tt
 
   -- A site at a time.
   Event : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type

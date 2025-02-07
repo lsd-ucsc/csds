@@ -35,7 +35,7 @@ module Execution.Causality.Properties where
     as Tree
     using (Tree; Site)
   open import Execution.Core
-    using (_⇶_; Event; Cut; _;_)
+    using (_⇶_; Event; _;_)
     using (perm; tick; fork; join; init; term; id; _∥_; _⟫_)
   open import Execution.Causality
     using (Arr[_]; _↝_)

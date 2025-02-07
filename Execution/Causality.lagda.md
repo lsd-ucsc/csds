@@ -32,7 +32,7 @@ module Execution.Causality where
     as Tree
     using (Tree; Site; _∗_)
   open import Execution.Core
-    using (_⇶_; Event; Tick; Cut; LeadingCut[_]; TrailingCut[_])
+    using (_⇶_; Event; Tick)
     using (perm; tick; fork; join; init; term; id; _∥_; _⟫_)
 
   variable
@@ -62,6 +62,7 @@ module Execution.Causality where
   LeadingEvent[ join    , s ] = inj₂ s
   LeadingEvent[ init    , s ] = inj₂ s
   LeadingEvent[ perm σ  , s ] = inj₂ s
+
 
   -- An interior path between two events within an execution.
   Arr[_] : (exec : Γ₁ ⇶ Γ₂) (e₁ e₂ : Event exec) → Type
