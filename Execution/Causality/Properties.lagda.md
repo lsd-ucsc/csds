@@ -35,15 +35,15 @@ module Execution.Causality.Properties where
     as Tree
     using (Tree; Site)
   open import Execution.Core
-    using (_⇶_; Event; _;_)
-    using (perm; tick; fork; join; init; term; id; _∥_; _⟫_)
+    using (_⇶_; Event)
+    using (perm; tick; fork; join; init; term; _∥_; _⟫_)
   open import Execution.Causality
     using (Arr[_]; _↝_)
     using (LeadingEvent[_,_]; TrailingEvent[_,_])
 
   variable
     T : Type
-    Γ₁ Γ₂ Γ₃ Γ₄ Γᵢ : Tree (Tree T)
+    Γ₁ Γ₂ Γ₃ Γ₄ Γᵢ : Tree
 ```
 
 </details>
@@ -104,7 +104,7 @@ module Execution.Causality.Properties where
   ↝-trans {exec = term} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
   --
   ↝-trans {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
-  ↝-trans {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans (Eq.cong (Tree.‵index σ) p₁₂) p₂₃
+  ↝-trans {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans (Eq.cong (Tree.forward σ) p₁₂) p₂₃
   ↝-trans {exec = perm σ} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
   ↝-trans {exec = perm σ} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) p₁₂ p₂₃ = Eq.trans p₁₂ p₂₃
 
@@ -178,9 +178,9 @@ module Execution.Causality.Properties where
   ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₁ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂
   ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₁ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ =
     Eq.trans (Eq.cong (λ ▢ → Eq.trans ▢ p₃₄) (Eq.sym (Eq.trans-cong p₁₂)))
-    (Eq.trans-assoc (Eq.cong (Tree.‵index σ) p₁₂))
+    (Eq.trans-assoc (Eq.cong (Tree.forward σ) p₁₂))
   ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₁ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ =
-    Eq.trans-assoc (Eq.cong (Tree.‵index σ) p₁₂)
+    Eq.trans-assoc (Eq.cong (Tree.forward σ) p₁₂)
   ↝∘-assoc {exec = perm σ} (inj₁ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂
   ↝∘-assoc {exec = perm σ} (inj₂ s₁) (inj₂ s₂) (inj₂ s₃) (inj₂ s₄) p₁₂ p₂₃ p₃₄ = Eq.trans-assoc p₁₂
 ```

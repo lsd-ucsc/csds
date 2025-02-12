@@ -29,6 +29,7 @@ module Execution.Sites where
   open import Relation.Binary.PropositionalEquality
     as Eq
     using (_≡_)
+    renaming (trans to infixl 20 _∙_)
 
   infix 6 _∗_
 ```
@@ -106,15 +107,15 @@ module Execution.Sites where
   Tree[ site    ] L = L
   Tree[ Γ₁ ∗ Γ₂ ] L = Tree[ Γ₁ ] L × Tree[ Γ₂ ] L
 
-  permute : ∀{L Γ₁ Γ₂} → (Γ₁ ≅ Γ₂) → (Tree[ Γ₁ ] L → Tree[ Γ₂ ] L)
+  permute : ∀{L Γ₁ Γ₂} → (Γ₁ ≅ Γ₂) → (Tree[ Γ₂ ] L → Tree[ Γ₁ ] L)
   permute (σ₁ ‵∗ σ₂)        (l₁ , l₂)        = (permute σ₁ l₁ , permute σ₂ l₂)
-  permute (‵trans   σ₁ σ₂)  l                = permute σ₂ (permute σ₁ l)
+  permute (‵trans   σ₁ σ₂)  l                = (permute σ₁ ∘ permute σ₂) l
   permute (‵refl    _)      l                = l
   permute (‵swap    _ _)    (l₁ , l₂)        = (l₂ , l₁)
-  permute (‵assoc   _ _ _)  ((l₁ , l₂) , l₃) = (l₁ , (l₂ , l₃))
-  permute (‵assoc⁻¹ _ _ _)  (l₁ , (l₂ , l₃)) = ((l₁ , l₂) , l₃)
-  permute (‵unitₗ   _)      (_ , l)          = l
-  permute (‵unitₗ⁻¹ _)      l                = (tt , l)
+  permute (‵assoc   _ _ _)  (l₁ , (l₂ , l₃)) = ((l₁ , l₂) , l₃)
+  permute (‵assoc⁻¹ _ _ _)  ((l₁ , l₂) , l₃) = (l₁ , (l₂ , l₃))
+  permute (‵unitₗ   _)      l                = (tt , l)
+  permute (‵unitₗ⁻¹ _)      (tt , l)         = l
 
   map : ∀{L₁ L₂ Γ} → (f : L₁ → L₂) → (Tree[ Γ ] L₁ → Tree[ Γ ] L₂)
   map {Γ = ∅}       f l         = tt
@@ -143,19 +144,19 @@ module Execution.Sites where
   repeat : ∀{L} Γ → (l : L) → Tree[ Γ ] L
   repeat Γ l = tabulate Γ (λ _ → l)
 
-  ‵index : {Γ₁ Γ₂ : Tree}
-         → (Γ₁ ≅ Γ₂)
-         → Site Γ₂ → Site Γ₁
-  ‵index σ = lookup (permute σ (eigentree _))
+  forward : {Γ₁ Γ₂ : Tree}
+          → (Γ₁ ≅ Γ₂)
+          → Site Γ₁ → Site Γ₂
+  forward σ = lookup (permute σ (eigentree _))
 
 
   permute-sym : ∀{L Γ₁ Γ₂} → (σ : Γ₁ ≅ Γ₂) → (l : Tree[ Γ₁ ] L)
               → permute (‵trans σ (‵sym σ)) l ≡ l
   permute-sym (σ₁ ‵∗ σ₂)       (l₁ , l₂) =
     Eq.cong₂ _,_ (permute-sym σ₁ l₁) (permute-sym σ₂ l₂)
-  permute-sym (‵trans σ₁ σ₂)   l = Eq.trans
-    (Eq.cong (permute (‵sym σ₁)) (permute-sym σ₂ (permute σ₁ l)))
-    (permute-sym σ₁ l)
+  permute-sym (‵trans σ₁ σ₂)   l =
+    ( Eq.cong (permute σ₁) (permute-sym σ₂ (permute (‵sym σ₁) l))
+    ∙ permute-sym σ₁ l )
   permute-sym (‵refl    _)     _ = Eq.refl
   permute-sym (‵swap    _ _)   _ = Eq.refl
   permute-sym (‵assoc   _ _ _) _ = Eq.refl
@@ -167,9 +168,9 @@ module Execution.Sites where
               → permute (‵trans (‵sym σ) σ) l ≡ l
   permute-sym' (σ₁ ‵∗ σ₂)       (l₁ , l₂) =
     Eq.cong₂ _,_ (permute-sym' σ₁ l₁) (permute-sym' σ₂ l₂)
-  permute-sym' (‵trans σ₁ σ₂)   l = Eq.trans
-    (Eq.cong (permute σ₂) (permute-sym' σ₁ (permute (‵sym σ₂) l)))
-    (permute-sym' σ₂ l)
+  permute-sym' (‵trans σ₁ σ₂)   l =
+    ( Eq.cong (permute (‵sym σ₂)) (permute-sym' σ₁ (permute σ₂ l))
+    ∙ permute-sym' σ₂ l )
   permute-sym' (‵refl    _)     _ = Eq.refl
   permute-sym' (‵swap    _ _)   _ = Eq.refl
   permute-sym' (‵assoc   _ _ _) _ = Eq.refl
@@ -192,10 +193,10 @@ module Execution.Sites where
       (tabulate-lookup {Γ = Γ₁} l₁)
       (tabulate-lookup {Γ = Γ₂} l₂)
 
-  map-permute : ∀{L₁ L₂ Γ₁ Γ₂} (σ : Γ₁ ≅ Γ₂) (l : Tree[ Γ₁ ] L₁) (f : L₁ → L₂)
+  map-permute : ∀{L₁ L₂ Γ₁ Γ₂} (σ : Γ₁ ≅ Γ₂) (l : Tree[ Γ₂ ] L₁) (f : L₁ → L₂)
               → map f (permute σ l) ≡ permute σ (map f l)
   map-permute (σ₁ ‵∗ σ₂) (l₁ , l₂) f = Eq.cong₂ _,_ (map-permute σ₁ l₁ f) (map-permute σ₂ l₂ f)
-  map-permute (‵trans σ₁ σ₂) l f = Eq.trans (map-permute σ₂ (permute σ₁ l) f) (Eq.cong (permute σ₂) (map-permute σ₁ l f))
+  map-permute (‵trans σ₁ σ₂) l f = Eq.trans (map-permute σ₁ (permute σ₂ l) f) (Eq.cong (permute σ₁) (map-permute σ₂ l f))
   map-permute (‵refl _) l f = Eq.refl
   map-permute (‵swap a b) l f = Eq.refl
   map-permute (‵assoc a b c) l f = Eq.refl
@@ -222,42 +223,36 @@ module Execution.Sites where
   tabulate-eta site      f g p = p here
   tabulate-eta (Γ₁ ∗ Γ₂) f g p = Eq.cong₂ _,_ (tabulate-eta Γ₁ _ _ (p ∘ thereˡ _)) (tabulate-eta Γ₂ _ _ (p ∘ thereʳ _))
 
-  permute-tabulate : ∀{L Γ₁ Γ₂} (σ : Γ₁ ≅ Γ₂) (f : Site Γ₁ → L)
-                   → tabulate Γ₂ (f ∘ ‵index σ) ≡ permute σ (tabulate Γ₁ f)
+  permute-tabulate : ∀{L Γ₁ Γ₂} (σ : Γ₁ ≅ Γ₂) (f : Site Γ₂ → L)
+                   → tabulate Γ₁ (f ∘ forward σ) ≡ permute σ (tabulate Γ₂ f)
   permute-tabulate {Γ₁ = Γ₁} {Γ₂ = Γ₂} σ f =
-    Eq.trans (Eq.trans (Eq.trans
-      (tabulate-eta Γ₂
-        (λ x → f (lookup (permute σ (tabulate Γ₁ (λ s → s))) x))
-        _
-        (λ s → map-lookup f (permute σ (tabulate Γ₁ (λ s → s))) s) )
-      (tabulate-lookup {Γ = Γ₂} (map f (permute σ (tabulate Γ₁ (λ s → s))))) )
-      (map-permute σ (tabulate Γ₁ (λ s → s)) f) )
-      (Eq.cong (permute σ) (map-tabulate (λ s → s) f))
+    ( tabulate-eta Γ₁ _ _ (map-lookup f (permute σ (tabulate Γ₂ (λ s → s))))
+    ∙ tabulate-lookup {Γ = Γ₁} (map f (permute σ (tabulate Γ₂ (λ s → s))))
+    ∙ map-permute σ (tabulate Γ₂ (λ s → s)) f
+    ∙ Eq.cong (permute σ) (map-tabulate (λ s → s) f) )
 
-  module _ where
-    ‶index : {Γ₁ Γ₂ : Tree} (σ : Γ₁ ≅ Γ₂)
-           → (s : Site Γ₂)
-           → (‵index (‵sym σ) ∘ ‵index σ) s ≡ s
-    ‶index {Γ₁ = Γ₁} {Γ₂} σ s =
-      Eq.trans (Eq.trans (Eq.trans (Eq.trans (Eq.trans
-        (map-lookup (‵index (‵sym σ)) (permute σ (tabulate Γ₁ (λ ■ → ■))) s)
-        (Eq.cong (λ ▢ → lookup ▢ s)
-                 (map-permute σ (tabulate Γ₁ (λ ■ → ■)) (map (lookup (permute (‵sym σ) (tabulate Γ₂ (λ ■ → ■))))))) )
-        (Eq.cong (λ ▢ → lookup (permute σ ▢) s)
-                 (map-tabulate (λ ■ → ■) (lookup {Γ = Γ₁} (permute (‵sym σ) (tabulate Γ₂ (λ s₁ → s₁)))))) )
-        (Eq.cong (λ ▢ → lookup (permute σ ▢) s) (tabulate-lookup {Γ = Γ₁} (permute (‵sym σ) (tabulate Γ₂ (λ s₁ → s₁))))) )
-        (Eq.cong (λ ▢ → lookup ▢ s) (permute-sym' σ (tabulate Γ₂ λ ■ → ■))))
-        (lookup-tabulate (λ ■ → ■) s)
+  forward-sym : {Γ₁ Γ₂ : Tree} (σ : Γ₁ ≅ Γ₂)
+              → (s : Site Γ₁)
+              → (forward (‵sym σ) ∘ forward σ) s ≡ s
+  forward-sym {Γ₁ = Γ₁} {Γ₂} σ s =
+    ( map-lookup (forward (‵sym σ)) (permute σ (tabulate Γ₂ (λ ■ → ■))) s
+    ∙ Eq.cong (λ ▢ → lookup ▢ s)
+      ( map-permute σ (tabulate Γ₂ (λ ■ → ■)) (map (lookup (permute (‵sym σ) (tabulate Γ₁ (λ ■ → ■)))))
+      ∙ Eq.cong (permute σ)
+        ( map-tabulate (λ ■ → ■) (lookup {Γ = Γ₂} (permute (‵sym σ) (tabulate Γ₁ (λ s₁ → s₁))))
+        ∙ tabulate-lookup {Γ = Γ₂} (permute (‵sym σ) (tabulate Γ₁ (λ ■ → ■))) )
+      ∙ permute-sym σ (tabulate Γ₁ λ ■ → ■) )
+    ∙ lookup-tabulate (λ ■ → ■) s )
 
-  module _ where
-    ‵lookup : {L : Type} {Γ₁ Γ₂ : Tree} (σ : Γ₁ ≅ Γ₂)
-            → (l : Tree[ Γ₁ ] L)
-            → (s : Site Γ₂)
-            → lookup l (‵index σ s) ≡ lookup (permute σ l) s
-    ‵lookup {Γ₁ = Γ₁} σ l s =
-      Eq.trans (Eq.trans (Eq.trans
-        (map-lookup (lookup l) (permute σ (tabulate Γ₁ (λ ■ → ■))) s)
-        (Eq.cong (λ ▢ → lookup ▢ s) (map-permute σ (tabulate Γ₁ (λ ■ → ■)) (lookup l))) )
-        (Eq.cong (λ ▢ → lookup (permute σ ▢) s) (map-tabulate (λ ■ → ■) (lookup {Γ = Γ₁} l))) )
-        (Eq.cong (λ ▢ → lookup (permute σ ▢) s) (tabulate-lookup {Γ = Γ₁} l))
+  lookup-forward : {L : Type} {Γ₁ Γ₂ : Tree} (σ : Γ₁ ≅ Γ₂)
+                 → (l : Tree[ Γ₂ ] L)
+                 → (s : Site Γ₁)
+                 → lookup l (forward σ s) ≡ lookup (permute σ l) s
+  lookup-forward {Γ₁ = Γ₁} {Γ₂ = Γ₂} σ l s =
+    ( map-lookup (lookup l) (permute σ (tabulate Γ₂ (λ ■ → ■))) s
+    ∙ Eq.cong (λ ▢ → lookup ▢ s)
+      ( map-permute σ (tabulate Γ₂ (λ ■ → ■)) (lookup l)
+      ∙ Eq.cong (permute σ)
+        ( map-tabulate {Γ = Γ₂} (λ ■ → ■) (lookup l)
+        ∙ tabulate-lookup {Γ = Γ₂} l ) ) )
 ```

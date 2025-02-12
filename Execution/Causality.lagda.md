@@ -33,11 +33,11 @@ module Execution.Causality where
     using (Tree; Site; _∗_)
   open import Execution.Core
     using (_⇶_; Event; Tick)
-    using (perm; tick; fork; join; init; term; id; _∥_; _⟫_)
+    using (perm; tick; fork; join; init; term; _∥_; _⟫_)
 
   variable
     T : Type
-    Γ₁ Γ₂ Γᵢ : Tree (Tree T)
+    Γ₁ Γ₂ Γᵢ : Tree
 ```
 
 </details>
@@ -107,7 +107,7 @@ module Execution.Causality where
   Arr[ perm σ ] (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
   Arr[ perm σ ] (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
   Arr[ perm σ ] (inj₂ s₁) (inj₁ s₂) = ⊥
-  Arr[ perm σ ] (inj₁ s₁) (inj₂ s₂) = Tree.‵index σ s₁ ≡ s₂
+  Arr[ perm σ ] (inj₁ s₁) (inj₂ s₂) = Tree.forward σ s₁ ≡ s₂
 
   _↝_ : {exec : Γ₁ ⇶ Γ₂} → (_ _ : Event exec) → Type
   e₁ ↝ e₂ = Arr[ _ ] e₁ e₂

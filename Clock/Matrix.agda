@@ -50,8 +50,6 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
     open import Clock.Interpret
       as Interpret
       using (Step; start; act; merge)
-    open import Clock.Monotonicity
-      as Monotonicity
       using (Clock)
     open Clock
       using (≤-refl; ≤-trans; act-mono; merge-mono¹; merge-mono²)
@@ -94,6 +92,6 @@ module Clock.Matrix (Pid : Type) (_≟_ : DecidableEquality Pid) where
     merge-mono² clock t₁ t₂ (i , j) = ℕ-Prop.m≤n⊔m _ _
 
     -- Obtain a global timestamping function for any execution.
-    timestamp = Interpret.timestamp alg
+    timestamp = Interpret.timestamp clock
     -- Obtain a proof of the clock condition for any execution and any initial timestamps.
-    mono = Monotonicity.timestamp-mono clock
+    mono = Interpret.timestamp-mono clock

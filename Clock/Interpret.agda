@@ -3,51 +3,34 @@ open import Agda.Primitive
   using () renaming (Set to Type)
 
 module Clock.Interpret where
-  open import Function
-    using (_∘_)
   open import Data.Unit
     using (⊤; tt)
   open import Data.Product
-    using (_×_; _,_)
-  open import Data.Sum
-    using (inj₁; inj₂)
+    using (_×_; _,_; ∃-syntax)
   open import Execution.Sites
     as Sites
-    using (Tree; Site; ∅; leaf; _∗_)
+    using (Tree; Tree[_]; permute; forward; ‵sym; permute-sym)
   open import Execution.Core
     using (_⇶_; perm; tick; fork; join; init; term; _⟫_; _∥_)
     using (Event)
   open import Execution.Causality
-    using (LeadingEvent[_,_])
+    using (_↝_)
+  open import Execution.Cut
+    using (module MonotoneMap)
+  open import Relation.Binary.PropositionalEquality
+    as Eq
+    using ()
 
   variable
-    T : Type
-    Γ Γ₁ Γ₂ Γ₃ Γ₄ : Tree (Tree T)
-    Action State : Type
+    Γ₁ Γ₂ : Tree
 
   data Step (Action State : Type) : Type where
     start :                  Step Action State
     act   : Action → State → Step Action State
     merge : State  → State → Step Action State
 
-  module _ (State : Type) where
-    Timestamped : Tree (Tree T) → Type
-    Timestamped ∅ = ⊤
-    Timestamped (leaf _) = State
-    Timestamped (Γ₁ ∗ Γ₂) = Timestamped Γ₁ × Timestamped Γ₂
-
-  timestamped : {Γ : Tree (Tree T)} → Timestamped State Γ → (Site Γ → State)
-  timestamped ts          Site.here         = ts
-  timestamped (ts₁ , ts₂) (Site.thereˡ _ s) = timestamped ts₁ s
-  timestamped (ts₁ , ts₂) (Site.thereʳ _ s) = timestamped ts₂ s
-
-  timestamped⁻¹ : {Γ : Tree (Tree T)} → (Site Γ → State) → Timestamped State Γ
-  timestamped⁻¹ {Γ = ∅}       ts = tt
-  timestamped⁻¹ {Γ = leaf Γ}  ts = ts Site.here
-  timestamped⁻¹ {Γ = Γ₁ ∗ Γ₂} ts = (timestamped⁻¹ (ts ∘ Site.thereˡ _) , timestamped⁻¹ (ts ∘ Site.thereʳ _))
-
   module _ (Action : Type) where
-    Stepped : {Γ₁ Γ₂ : Tree (Tree T)} → (Γ₁ ⇶ Γ₂) → Type
+    Stepped : (Γ₁ ⇶ Γ₂) → Type
     Stepped (x₁ ∥ x₂) = Stepped x₁ × Stepped x₂
     Stepped (x₁ ⟫ x₂) = Stepped x₁ × Stepped x₂
     Stepped tick = Action
@@ -57,29 +40,57 @@ module Clock.Interpret where
     Stepped term = ⊤
     Stepped (perm σ) = ⊤
 
+  record Clock {Action State : Type}
+               (alg : Step Action State → State)
+               (_≤_ : State → State → Type)
+             : Type where
+    open Step using (act; merge)
+
+    field ≤-refl      : ∀ s → s ≤ s
+    field ≤-trans     : ∀ s₁ s₂ s₃ → (s₁ ≤ s₂) → (s₂ ≤ s₃) → (s₁ ≤ s₃)
+    field act-mono    : ∀ p s → s ≤ alg (act p s)
+    field merge-mono¹ : ∀ s₁ s₂ → s₁ ≤ alg (merge s₁ s₂)
+    field merge-mono² : ∀ s₁ s₂ → s₂ ≤ alg (merge s₁ s₂)
+
   -- Given an algebra on steps, we can specify computations
   -- on replicas across spatially-distributed sites.
-  module _ {Action State : Type} (alg : Step Action State → State) where
-      apply : (exec : Γ₁ ⇶ Γ₂) (acts : Stepped Action exec)
-            → Timestamped State Γ₁ → Timestamped State Γ₂
-      timestamp : (exec : Γ₁ ⇶ Γ₂) (acts : Stepped Action exec)
-                → Timestamped State Γ₁ → (Event exec → State)
+  module _ {Action State : Type} {alg : Step Action State → State}
+           {_≤_ : State → State → Type} (clock : Clock alg _≤_)
+           where
+    open Clock clock
+      using (≤-refl; ≤-trans; act-mono; merge-mono¹; merge-mono²)
 
-      apply exec acts ts = timestamped⁻¹ (timestamp exec acts ts ∘ LeadingEvent[ exec ,_])
+    timestamp' : (exec : Γ₁ ⇶ Γ₂) (acts : Stepped Action exec)
+               → (l₁ : Tree[ Γ₁ ] State) → ∃[ l₂ ] MonotoneMap.Map' State _≤_ exec l₁ l₂
+    timestamp' (x  ∥ x') (acts , acts') (l₁ , l₁') =
+      let (l₂  , m ) = timestamp' x  acts  l₁  in
+      let (l₂' , m') = timestamp' x' acts' l₁' in
+      ((l₂ , l₂') , (m , m'))
+    timestamp' (x₁ ⟫ x₂) (acts₁ , acts₂) l₁ =
+      let (lₘ , m₁) = timestamp' x₁ acts₁ l₁ in
+      let (l₂ , m₂) = timestamp' x₂ acts₂ lₘ in
+      (l₂ , (lₘ , m₁ , m₂))
+    timestamp' tick  acts l₁         = (alg (act acts l₁)   , act-mono acts l₁)
+    timestamp' fork     _ l₁         = ((l₁ , l₁)           , (≤-refl _ , ≤-refl _))
+    timestamp' join     _ (l₁ , l₁') = (alg (merge l₁ l₁')  , (merge-mono¹ l₁ l₁' , merge-mono² l₁ l₁'))
+    timestamp' init     _ l₁         = (alg start           , tt)
+    timestamp' term     _ l₁         = (tt                  , tt)
+    timestamp' (perm σ) _ l₁         = (permute (‵sym σ) l₁ , Eq.sym (permute-sym σ l₁))
 
-      timestamp (x₁ ∥ x₂) (acts , _) (ts , _) (inj₁ e) = timestamp x₁ acts ts e
-      timestamp (x₁ ∥ x₂) (_ , acts) (_ , ts) (inj₂ e) = timestamp x₂ acts ts e
-      timestamp (x₁ ⟫ x₂) (acts , _)      ts  (inj₁ e) = timestamp x₁ acts ts e
-      timestamp (x₁ ⟫ x₂) (acts₁ , acts₂) ts  (inj₂ e) = timestamp x₂ acts₂ (apply x₁ acts₁ ts) e
-      -- trailing events
-      timestamp tick      _               ts  (inj₁ s) = timestamped ts s
-      timestamp fork      _               ts  (inj₁ s) = timestamped ts s
-      timestamp join      _               ts  (inj₁ s) = timestamped ts s
-      timestamp term      _               ts  (inj₁ s) = timestamped ts s
-      timestamp (perm _)  _               ts  (inj₁ s) = timestamped ts s
-      -- leading events
-      timestamp tick      action          t   (inj₂ s) = alg (act action t)
-      timestamp fork      _               t   (inj₂ s) = t
-      timestamp join      _        (t₁ , t₂)  (inj₂ s) = alg (merge t₁ t₂)
-      timestamp init      _               _   (inj₂ s) = alg start
-      timestamp (perm σ)  _               ts  (inj₂ s) = timestamped ts (Sites.‵index (Sites.‵sym σ) s)
+    timestamp : (exec : Γ₁ ⇶ Γ₂) (acts : Stepped Action exec)
+              → (l₁ : Tree[ Γ₁ ] State) → (Event exec → State)
+    timestamp exec acts l₁ = MonotoneMap.map State _≤_ (l₁ , timestamp' exec acts l₁)
+
+
+    _⊑_ : {exec : Γ₁ ⇶ Γ₂} → Event exec → Event exec → Type
+    _⊑_ {exec = exec} e₁ e₂ =
+      ∀ actions input →
+      let C[_] = timestamp exec actions input
+      in C[ e₁ ] ≤ C[ e₂ ]
+
+    timestamp-mono : (exec : Γ₁ ⇶ Γ₂)
+                   → (e₁ e₂ : Event exec)
+                   → e₁ ↝ e₂
+                   → e₁ ⊑ e₂
+    timestamp-mono exec e₁ e₂ p₁₂ acts l₁ =
+      MonotoneMap.map-monotone State _≤_ ≤-refl (λ{_} → ≤-trans _ _ _) exec (l₁ , timestamp' exec acts l₁) e₁ e₂ p₁₂
