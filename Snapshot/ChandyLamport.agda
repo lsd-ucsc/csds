@@ -59,12 +59,13 @@ open import Agda.Primitive
 module Snapshot.ChandyLamport where
 
 open import Data.Nat using (ℕ)
-open import Data.Vec using (Vec; []; _∷_; replicate) renaming (map to mapv)
+open import Data.Vec using (Vec; []; _∷_; lookup; replicate; _[_]≔_; _[_]%=_; zipWith) renaming (map to mapv)
 open import Data.Bool using (Bool; false; true)
-open import Data.List using (List; []; _∷_; _∷ʳ_; mapMaybe) renaming (map to mapl)
-open import Data.Product using (_×_; _,_)
+open import Data.List using (List; []; _∷_; _∷ʳ_; mapMaybe; _++_) renaming (map to mapl)
+open import Data.Product using (_×_; _,_; ∃-syntax)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Fin using (Fin; zero; suc)
+open import Relation.Binary.PropositionalEquality as Eq using (_≡_)
 
 import Execution.Core
 
@@ -72,6 +73,7 @@ import Execution.Core
 -- * Per node.
 -- * Per channel.
 -- * Fully connected. TODO: Not connected.
+-- * `chans` vec index is sender then receiver.
 record Conf (S M : Type) (n : ℕ) : Type where
   constructor conf
   field nodes : Vec S n
@@ -81,6 +83,7 @@ data RecordingStatus : Type where
   active : RecordingStatus
   inactive : RecordingStatus
 
+-- | Vec index is sender.
 Recordings : Type → ℕ → Type
 Recordings M n = Vec (RecordingStatus × List M) n
 
@@ -109,26 +112,36 @@ Conf-proj : ∀ {S M n} → Conf (CLS S M n) (CLM M) n → Conf S M n
 Conf.nodes (Conf-proj (conf nodes _)) = mapv CLS-proj nodes 
 Conf.chans (Conf-proj (conf _ chans)) = mapv (mapv (mapMaybe CLM-proj)) chans
 
--- | Given a state and a message produce a new state and vector of
--- outgoing messages on each channel.
+-- | Given a state, a message, and a sender, produce a new state and
+-- vector of outgoing messages on each channel.
 Reaction : Type → Type → ℕ → Type
 Reaction S M n = S → M → Fin n → S × Vec (List M) n
 
 ConfRel : Type → Type → ℕ → Type₁
 ConfRel S M n = (_ _ : Conf S M n) → Type
 
+-- | There exists a sender and receiver and some messages such that
+-- looking up the chan s→r finds a queue with m at the right.
 Deliverable : ∀ {S M n} → M → Conf S M n → Type
-Deliverable = _
+Deliverable m (conf nodes chans) =
+    ∃[ s ] ∃[ r ] ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m
 
+-- | Selectively update the recipient's (of a deliverable message)
+-- state and outbound messages by running its reaction function.
 deliver : ∀ {S M n} {m : M} {Γ : Conf S M n} → Reaction S M n → Deliverable m Γ → Conf S M n
-deliver = _
+deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
+  let (r' , out) = a (lookup nodes r) m s in 
+  let nodes' = nodes  [ r ]≔ r' in
+  let chans₁ = chans  [ s ]%= (_[ r ]≔ ms) in -- remove m from s→r
+  let chans₂ = chans₁ [ r ]%= zipWith _++_ out in -- add new messages to r→*
+  conf nodes' chans₂
 
 data App (S M : Type) (n : ℕ) (a : Reaction S M n) : ConfRel S M n where
   drive : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
         → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a d)
 
--- | response messages for initial snapshot: no red message at the
--- specified index and red messages eslewhere
+-- | Outgoing messages when starting a snapshot (no red message at the
+-- specified index and red messages elsewhere). Vec index is recipient. 
 broadcast-reds : ∀ {M n} → Fin n → Vec (List (CLM M)) n
 broadcast-reds zero = [] ∷ replicate _ (red ∷ [])
 broadcast-reds (suc i) = (red ∷ []) ∷ broadcast-reds i 
@@ -141,6 +154,7 @@ enqueue-message : ∀ {n M} → Fin n → M → Recordings M n → Recordings M 
 enqueue-message zero m ((status , rec) ∷ xs) = (status , rec ∷ʳ m ) ∷ xs
 enqueue-message (suc src) m (x ∷ xs) = x ∷ enqueue-message src m xs
 
+-- | Lift underlying app reactions to CL-extended reactions.
 lift : ∀ {S M n} → Reaction S M n → Reaction (CLS S M n) (CLM M) n
 lift a (live st) (msg m) src =
   -- in which we drive the underlying app with a message and wrap its output
