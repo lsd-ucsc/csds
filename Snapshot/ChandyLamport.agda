@@ -80,7 +80,7 @@ record Conf (S M : Type) (n : ℕ) : Type where
 -- | Given a state, a message, and a sender, produce a new state and
 -- vector of outgoing messages on each channel.
 Reaction : Type → Type → ℕ → Type
-Reaction S M n = S → M → Fin n → S × Vec (List M) n
+Reaction S M n = S → (M × Fin n) → S × Vec (List M) n
 
 ConfRel : Type → Type → ℕ → Type₁
 ConfRel S M n = (_ _ : Conf S M n) → Type
@@ -95,7 +95,7 @@ Deliverable m (conf nodes chans) =
 -- state and outbound messages by running its reaction function.
 deliver : ∀ {S M n} {m : M} {Γ : Conf S M n} → Reaction S M n → Deliverable m Γ → Conf S M n
 deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
-  let (r' , out) = a (lookup nodes r) m s in 
+  let (r' , out) = a (lookup nodes r) (m , s) in
   let nodes' = nodes  [ r ]≔ r' in
   let chans₁ = chans  [ s ]%= (_[ r ]≔ ms) in -- remove m from s→r
   let chans₂ = chans₁ [ r ]%= zipWith _++_ out in -- add new messages to r→*
@@ -142,24 +142,24 @@ enqueue-message (suc src) m (x ∷ xs) = x ∷ enqueue-message src m xs
 
 -- | Lift underlying app reactions to CL-extended reactions.
 lift : ∀ {S M n} → Reaction S M n → Reaction (CLS S M n) (CLM M) n
-lift a (live st) (msg m) src =
+lift a (live st) (msg m , src) =
   -- in which we drive the underlying app with a message and wrap its output
-  let st' , ms = a st m src in
+  let st' , ms = a st (m , src) in
   ( live st' 
   , mapv (mapl msg) ms
   )
-lift a (snap st (st₀ , recs)) (msg m) src =
+lift a (snap st (st₀ , recs)) (msg m , src) =
   -- in which we drive the underlying app as above, but also record the message
-  let st' , ms = a st m src in
+  let st' , ms = a st (m , src) in
   ( snap st' (st₀ , enqueue-message src m recs)
   , mapv (mapl msg) ms
   )
-lift a (live st) red src =
+lift a (live st) (red , src) =
   -- in which we start a snapshot for everything but the channel from which we recv'd red
   ( snap st (st , stop-recording src (replicate _ (active , [])))
   , broadcast-reds src
   )
-lift a (snap st (st₀ , recs)) red src =
+lift a (snap st (st₀ , recs)) (red , src) =
   -- in which we stop recording a channel
   ( snap st (st₀ , stop-recording src recs)
   , replicate _ []
