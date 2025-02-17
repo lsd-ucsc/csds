@@ -77,23 +77,6 @@ record Conf (S M : Type) (n : ℕ) : Type where
   field nodes : Vec S n
   field chans : Vec (Vec (List M) n) n
 
-data RecordingStatus : Type where
-  active : RecordingStatus
-  inactive : RecordingStatus
-
--- | Vec index is sender.
-Recordings : Type → ℕ → Type
-Recordings M n = Vec (RecordingStatus × List M) n
-
-data CLS (S M : Type) (n : ℕ) : Type where
-  live : S → CLS S M n
-  snap : S → S × Recordings M n → CLS S M n
-
--- | Either an underlying message, or a red-letter-message.
-data CLM (M : Type) : Type where
-  msg : M → CLM M
-  red : CLM M
-
 -- | Given a state, a message, and a sender, produce a new state and
 -- vector of outgoing messages on each channel.
 Reaction : Type → Type → ℕ → Type
@@ -121,6 +104,27 @@ deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
 data App (S M : Type) (n : ℕ) (a : Reaction S M n) : ConfRel S M n where
   delivered : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
         → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a d)
+
+
+
+-- * Chandy Lamport bits
+
+data RecordingStatus : Type where
+  active : RecordingStatus
+  inactive : RecordingStatus
+
+-- | Vec index is sender.
+Recordings : Type → ℕ → Type
+Recordings M n = Vec (RecordingStatus × List M) n
+
+data CLS (S M : Type) (n : ℕ) : Type where
+  live : S → CLS S M n
+  snap : S → S × Recordings M n → CLS S M n
+
+-- | Either an underlying message, or a red-letter-message.
+data CLM (M : Type) : Type where
+  msg : M → CLM M
+  red : CLM M
 
 -- | Outgoing messages when starting a snapshot (no red message at the
 -- specified index and red messages elsewhere). Vec index is recipient. 
