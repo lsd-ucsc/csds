@@ -79,8 +79,8 @@ record Conf (S M : Type) (n : ℕ) : Type where
 
 -- | Given a state, a message, and a sender, produce a new state and
 -- vector of outgoing messages on each channel.
-Reaction : Type → Type → ℕ → Type
-Reaction S M n = (M × Fin n) → S → S × Vec (List M) n
+Reaction : Type → Type → Type → ℕ → Type
+Reaction Stim S M n = Stim → S → S × Vec (List M) n
 
 ConfRel : Type → Type → ℕ → Type₁
 ConfRel S M n = (_ _ : Conf S M n) → Type
@@ -93,7 +93,7 @@ Deliverable m (conf nodes chans) =
 
 -- | Selectively update the recipient's (of a deliverable message)
 -- state and outbound messages by running its reaction function.
-deliver : ∀ {S M n} {m : M} {Γ : Conf S M n} → Reaction S M n → Deliverable m Γ → Conf S M n
+deliver : ∀ {S M n} {m : M} {Γ : Conf S M n} → Reaction (M × Fin n) S M n → Deliverable m Γ → Conf S M n
 deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
   let (r' , out) = a (m , s) (lookup nodes r) in
   let nodes' = nodes  [ r ]≔ r' in
@@ -101,7 +101,7 @@ deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
   let chans₂ = chans₁ [ r ]%= zipWith _++_ out in -- add new messages to r→*
   conf nodes' chans₂
 
-data App (S M : Type) (n : ℕ) (a : Reaction S M n) : ConfRel S M n where
+data App (S M : Type) (n : ℕ) (a : Reaction (M × Fin n) S M n) : ConfRel S M n where
   delivered : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
         → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a d)
 
@@ -141,7 +141,8 @@ enqueue-message zero m ((status , rec) ∷ xs) = (status , rec ∷ʳ m ) ∷ xs
 enqueue-message (suc src) m (x ∷ xs) = x ∷ enqueue-message src m xs
 
 -- | Lift underlying app reactions to CL-extended reactions.
-lift : ∀ {S M n} → Reaction S M n → Reaction (CLS S M n) (CLM M) n
+lift : ∀ {S M n} → Reaction     (M × Fin n)      S           M  n
+                 → Reaction (CLM M × Fin n) (CLS S M n) (CLM M) n
 lift a (msg m , src) (live st) =
   -- in which we drive the underlying app with a message and wrap its output
   let st' , ms = a (m , src) st in
