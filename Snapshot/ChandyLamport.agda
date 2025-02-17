@@ -9,12 +9,10 @@ open import Agda.Primitive
   Dijkstra note).
 * [x] Next-next time: Poke at the elements of an implementation and/or
   proof.
-* [ ] Figure out how to handle red-letter messages (tie up loose ends).
+* [x] Figure out how to handle red-letter messages (tie up loose ends).
   * [ ] JMC: We may want to switch from a functional repr to a relational repr
         for local transitions (Reaction). B/C relational defns are easier to
         use for reasoning.
-* [ ] Change the boolean in Recordings to an ADT.
-* [ ] fill missing holes
 
 # Chandy Lamport algorithm
 
@@ -90,27 +88,11 @@ Recordings M n = Vec (RecordingStatus × List M) n
 data CLS (S M : Type) (n : ℕ) : Type where
   live : S → CLS S M n
   snap : S → S × Recordings M n → CLS S M n
---done : S → (S × Vec (List M) n) → CLS S M n
-
-CLS-proj : ∀ {S M n} → CLS S M n → S
-CLS-proj (live s) = s
-CLS-proj (snap s _) = s
 
 -- | Either an underlying message, or a red-letter-message.
 data CLM (M : Type) : Type where
   msg : M → CLM M
   red : CLM M
-
-CLM-proj : ∀ {M} → CLM M → Maybe M
-CLM-proj (msg m) = just m
-CLM-proj red = nothing
-
--- CLC : Type → Type → ℕ → Type
--- CLC S M n = Conf (CLS S M n) (CLM M) n
-
-Conf-proj : ∀ {S M n} → Conf (CLS S M n) (CLM M) n → Conf S M n
-Conf.nodes (Conf-proj (conf nodes _)) = mapv CLS-proj nodes 
-Conf.chans (Conf-proj (conf _ chans)) = mapv (mapv (mapMaybe CLM-proj)) chans
 
 -- | Given a state, a message, and a sender, produce a new state and
 -- vector of outgoing messages on each channel.
@@ -178,24 +160,3 @@ lift a (snap st (st₀ , recs)) red src =
   ( snap st (st₀ , stop-recording src recs)
   , replicate _ []
   )
-
--- | Relational model of transitions in a chandy lamport execution.
---
--- PLR explaining what JMC said: This is subtly wrong because CLM-proj
--- drops red-letter-messages, meaning that our use of Conf-proj in
--- CL.lift allows system transitions "under" red-letter-messages that
--- are next in line to be received.
---
--- JMC: This is fundamentally wrong because *both* levels of the
--- relation must handle delivered messages.
---
--- JMC: deliver-red, deliver-msg
---
--- PLR: i.e. Only our transitions lead to deliveries in the underlying transition.
---
--- JMC: Should all transitions be delivery transitions? I think
--- so. "Here, take a message, produce a bunch more messages, and
--- change your state." Everything is just that.
-data CL (S M : Type) (n : ℕ) (_⇒_ : ConfRel S M n) : ConfRel (CLS S M n) (CLM M) n where
-  -- possible transitions
---lift : ∀ Γ Γ' → (Conf-proj Γ ⇒ Conf-proj Γ') → CL S M n _⇒_ Γ Γ'
