@@ -119,7 +119,7 @@ deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
   conf nodes' chans₂
 
 data App (S M : Type) (n : ℕ) (a : Reaction S M n) : ConfRel S M n where
-  drive : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
+  delivered : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
         → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a d)
 
 -- | Outgoing messages when starting a snapshot (no red message at the
