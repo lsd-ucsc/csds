@@ -135,27 +135,37 @@ enqueue-message zero m ((status , rec) ∷ xs) = (status , rec ∷ʳ m ) ∷ xs
 enqueue-message (suc src) m (x ∷ xs) = x ∷ enqueue-message src m xs
 
 -- | Lift underlying app reactions to CL-extended reactions.
-lift : ∀ {S M n} → Reaction     (M × Fin n)      S           M  n
-                 → Reaction (CLM M × Fin n) (CLS S M n) (CLM M) n
-lift a (msg m , src) (live st) =
+lift : ∀ {S M n} → Reaction            (M × Fin n)       S           M  n
+                 → Reaction (Maybe (CLM M × Fin n)) (CLS S M n) (CLM M) n
+lift a (just (msg m , src)) (live st) =
   -- in which we drive the underlying app with a message and wrap its output
   let st' , ms = a (m , src) st in
   ( live st' 
   , mapv (mapl msg) ms
   )
-lift a (msg m , src) (snap st (st₀ , recs)) =
+lift a (just (msg m , src)) (snap st (st₀ , recs)) =
   -- in which we drive the underlying app as above, but also record the message
   let st' , ms = a (m , src) st in
   ( snap st' (st₀ , enqueue-message src m recs)
   , mapv (mapl msg) ms
   )
-lift a (red , src) (live st) =
+lift a (just (red , src)) (live st) =
   -- in which we start a snapshot for everything but the channel from which we recv'd red
   ( snap st (st , stop-recording src (replicate _ (active , [])))
   , replicate _ (red ∷ [])
   )
-lift a (red , src) (snap st (st₀ , recs)) =
+lift a (just (red , src)) (snap st (st₀ , recs)) =
   -- in which we stop recording a channel
   ( snap st (st₀ , stop-recording src recs)
   , replicate _ []
+  )
+lift a nothing st@(snap _ _) =
+  -- in which we don't start a snapshot because IT is ongoing
+  ( st
+  , replicate _ []
+  )
+lift a nothing (live st) =
+  -- in which we start a snapshot because we were bored
+  ( snap st (st , replicate _ (active , []))
+  , replicate _ (red ∷ [])
   )
