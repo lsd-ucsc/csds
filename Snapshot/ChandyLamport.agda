@@ -13,6 +13,7 @@ open import Agda.Primitive
   * [ ] JMC: We may want to switch from a functional repr to a relational repr
         for local transitions (Reaction). B/C relational defns are easier to
         use for reasoning.
+* [ ] fill hole
 
 # Chandy Lamport algorithm
 
@@ -64,6 +65,7 @@ open import Data.Product using (_×_; _,_; ∃-syntax)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Fin using (Fin; zero; suc)
 open import Relation.Binary.PropositionalEquality as Eq using (_≡_)
+open import Data.Unit using (⊤)
 
 import Execution.Core
 
@@ -91,19 +93,30 @@ Deliverable : ∀ {S M n} → M → Conf S M n → Type
 Deliverable m (conf nodes chans) =
     ∃[ s ] ∃[ r ] ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m
 
+GlobalStim : Type → Type → Type → ℕ → Type₁
+GlobalStim Stim S M n = Fin n → Stim → (Conf S M n) → Type
+
 -- | Selectively update the recipient's (of a deliverable message)
 -- state and outbound messages by running its reaction function.
-deliver : ∀ {S M n} {m : M} {Γ : Conf S M n} → Reaction (M × Fin n) S M n → Deliverable m Γ → Conf S M n
-deliver {m = m} {Γ = conf nodes chans} a (s , r , ms , eq) =
-  let (r' , out) = a (m , s) (lookup nodes r) in
+deliver : ∀ {Stim S M n} {Γ : Conf S M n}
+  → Reaction Stim S M n
+  → (P : GlobalStim Stim S M n)
+  → (r : Fin n)
+  → (σ : Stim)
+  → P r σ Γ
+  → Conf S M n
+deliver {Γ = conf nodes chans} a _ r σ pf =
+  let (r' , out) = a σ (lookup nodes r) in
   let nodes' = nodes  [ r ]≔ r' in
-  let chans₁ = chans  [ s ]%= (_[ r ]≔ ms) in -- remove m from s→r
+  let chans₁ = {!!} in -- chans  [ s ]%= (_[ r ]≔ ms) in -- remove m from s→r
   let chans₂ = chans₁ [ r ]%= zipWith _++_ out in -- add new messages to r→*
   conf nodes' chans₂
 
-data App (S M : Type) (n : ℕ) (a : Reaction (M × Fin n) S M n) : ConfRel S M n where
-  delivered : (m : M) → (Γ : Conf S M n) → (d : Deliverable m Γ)
-        → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a d)
+--data App (S M : Type) (n : ℕ) (a : Reaction (M × Fin n) S M n) : ConfRel S M n where
+--  drive : (m : M) → (Γ : Conf S M n)
+--        → (s : Fin n) → (r : Fin n)
+--        → (d : ∃[ ms ] lookup (lookup (Conf.chans Γ) s) r ≡ ms ∷ʳ m)
+--        → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a (s , r , d))
 
 
 
@@ -169,3 +182,8 @@ lift a nothing (live st) =
   ( snap st (st , replicate _ (active , []))
   , replicate _ (red ∷ [])
   )
+
+-- "here is a stimulus within the CLC"
+Foo : ∀ {S M n} → GlobalStim (Maybe (CLM M × Fin n)) (CLS S M n) (CLM M) n
+Foo p nothing _ = ⊤
+Foo r (just (m , s)) (conf nodes chans) = ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m
