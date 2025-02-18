@@ -126,12 +126,6 @@ data CLM (M : Type) : Type where
   msg : M → CLM M
   red : CLM M
 
--- | Outgoing messages when starting a snapshot (no red message at the
--- specified index and red messages elsewhere). Vec index is recipient. 
-broadcast-reds : ∀ {M n} → Fin n → Vec (List (CLM M)) n
-broadcast-reds zero = [] ∷ replicate _ (red ∷ [])
-broadcast-reds (suc i) = (red ∷ []) ∷ broadcast-reds i 
-
 stop-recording : ∀ {n} {M : Type} → Fin n → Recordings M n → Recordings M n
 stop-recording zero ((status , rec) ∷ xs) = (inactive , rec) ∷ xs 
 stop-recording (suc i) (x ∷ xs) = x ∷ stop-recording i xs
@@ -158,7 +152,7 @@ lift a (msg m , src) (snap st (st₀ , recs)) =
 lift a (red , src) (live st) =
   -- in which we start a snapshot for everything but the channel from which we recv'd red
   ( snap st (st , stop-recording src (replicate _ (active , [])))
-  , broadcast-reds src
+  , replicate _ (red ∷ [])
   )
 lift a (red , src) (snap st (st₀ , recs)) =
   -- in which we stop recording a channel
