@@ -93,30 +93,39 @@ Deliverable : ∀ {S M n} → M → Conf S M n → Type
 Deliverable m (conf nodes chans) =
     ∃[ s ] ∃[ r ] ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m
 
-GlobalStim : Type → Type → Type → ℕ → Type₁
-GlobalStim Stim S M n = Fin n → Stim → (Conf S M n) → Type
+EnabledPred : Type → Type → Type → ℕ → Type₁
+EnabledPred Stim S M n = Fin n → Stim → (Conf S M n) → Type
+
+-- given an enabled stimulus we want to know how to obtain a subsequent state
+
+-- node blows up
 
 -- | Selectively update the recipient's (of a deliverable message)
 -- state and outbound messages by running its reaction function.
 deliver : ∀ {Stim S M n} {Γ : Conf S M n}
   → Reaction Stim S M n
-  → (P : GlobalStim Stim S M n)
+  → (Enabled : EnabledPred Stim S M n)
+  → (∀ {r σ Γ} → Enabled r σ Γ → Conf S M n)
   → (r : Fin n)
   → (σ : Stim)
-  → P r σ Γ
+  → Enabled r σ Γ
   → Conf S M n
-deliver {Γ = conf nodes chans} a _ r σ pf =
+deliver {Γ = Γ} a _ cleanup r σ enabled =
+  let conf nodes chans = cleanup enabled in -- TODO factor this out of deliver
   let (r' , out) = a σ (lookup nodes r) in
-  let nodes' = nodes  [ r ]≔ r' in
-  let chans₁ = {!!} in -- chans  [ s ]%= (_[ r ]≔ ms) in -- remove m from s→r
-  let chans₂ = chans₁ [ r ]%= zipWith _++_ out in -- add new messages to r→*
-  conf nodes' chans₂
+  let nodes' = nodes [ r ]≔ r' in -- update node r's state
+  let chans' = chans [ r ]%= zipWith _++_ out in -- add new messages to r→*
+  conf nodes' chans'
 
 --data App (S M : Type) (n : ℕ) (a : Reaction (M × Fin n) S M n) : ConfRel S M n where
 --  drive : (m : M) → (Γ : Conf S M n)
 --        → (s : Fin n) → (r : Fin n)
 --        → (d : ∃[ ms ] lookup (lookup (Conf.chans Γ) s) r ≡ ms ∷ʳ m)
 --        → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a (s , r , d))
+
+-- SPAAAACE DIMENSION need a think to lift a local application to a global application
+
+-- TIIIIIIME DIMENSION need a think to lift a global application to a run
 
 
 
@@ -184,6 +193,12 @@ lift a nothing (live st) =
   )
 
 -- "here is a stimulus within the CLC"
-Foo : ∀ {S M n} → GlobalStim (Maybe (CLM M × Fin n)) (CLS S M n) (CLM M) n
+Foo : ∀ {S M n} → EnabledPred (Maybe (CLM M × Fin n)) (CLS S M n) (CLM M) n
 Foo p nothing _ = ⊤
 Foo r (just (m , s)) (conf nodes chans) = ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m
+
+cleanupFoo : ∀ {S M n r σ} {Γ : Conf (CLS S M n) (CLM M) n}
+                  → Foo r σ Γ → Conf (CLS S M n) (CLM M) n
+cleanupFoo {σ = nothing} {Γ} _ = Γ
+cleanupFoo {r = r} {σ = just (_ , s)} {conf nodes chans} (ms , _) = {!!}
+-- replace the s→r channel with ms (eliding the final element)
