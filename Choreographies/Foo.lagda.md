@@ -45,11 +45,13 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
 ```agda
   data Ty : Type where
     𝟙 : Ty
-    _∗_ : Ty → Ty → Ty
+    _⊗_ : Ty → Ty → Ty
+    _⊕_ : Ty → Ty → Ty
 
   ⟦_⟧ : Ty → Type
   ⟦ 𝟙 ⟧ = ⊤
-  ⟦ τ₁ ∗ τ₂ ⟧ = ⟦ τ₁ ⟧ × ⟦ τ₂ ⟧
+  ⟦ τ₁ ⊗ τ₂ ⟧ = ⟦ τ₁ ⟧ × ⟦ τ₂ ⟧
+  ⟦ τ₁ ⊕ τ₂ ⟧ = ⟦ τ₁ ⟧ ⊎ ⟦ τ₂ ⟧
 
   _⟶_ : Ty → Ty → Type
   τ₁ ⟶ τ₂ = ⟦ τ₁ ⟧ → ⟦ τ₂ ⟧
@@ -57,8 +59,7 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
   Located : Type → Type
   Located T = T × Loc
 
-  _＠_ : {T : Type} → T → Loc → Located T
-  t ＠ l = (t , l)
+  pattern _＠_ t l = (t , l)
 
   -- The type of choreographic actions.
   data _⇒_ : (τ₁ τ₂ : (Ty × Loc)) → Type where
@@ -70,16 +71,16 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
   Actions (x ⟫ y) τ₁ τ₂ = ∃[ τₘ ] Actions x τ₁ τₘ × Actions y τₘ τ₂
   Actions tick τ₁ τ₂ = τ₁ ⇒ τ₂
   Actions (perm σ) τ₁ τ₂ = τ₁ ≡ Sites.permute σ τ₂
-  Actions fork (τ₁ , l₁) ((τ₂ , l₂) , (τ₂' , l₂')) = (τ₁ ≡ τ₂ ∗ τ₂') × (l₁ ≡ l₂) × (l₁ ≡ l₂')
-  Actions join ((τ₁ , l₁) , (τ₁' , l₁')) (τ₂ , l₂) = (τ₂ ≡ τ₁ ∗ τ₁') × (l₁ ≡ l₂) × (l₁' ≡ l₂)
-  Actions init _ (τ₂ , l₂) = 𝟙 ≡ τ₂
-  Actions term (τ₁ , l₁) _ = τ₁ ≡ 𝟙
+  Actions fork (τ₁ ＠ l₁) ((τ₂ ＠ l₂) , (τ₂' ＠ l₂')) = (τ₁ ≡ τ₂ ⊗ τ₂') × (l₁ ≡ l₂) × (l₁ ≡ l₂')
+  Actions join ((τ₁ ＠ l₁) , (τ₁' ＠ l₁')) (τ₂ ＠ l₂) = (τ₂ ≡ τ₁ ⊗ τ₁') × (l₁ ≡ l₂) × (l₁' ≡ l₂)
+  Actions init _ (τ₂ ＠ l₂) = 𝟙 ≡ τ₂
+  Actions term (τ₁ ＠ l₁) _ = τ₁ ≡ 𝟙
 
   module CentralizedSemantics where
     Localize : Tree[ Γ ] (Located Ty) → Ty
     Localize {Γ = ∅} _ = 𝟙
-    Localize {Γ = site} (τ , l) = τ
-    Localize {Γ = Γ₁ ∗ Γ₂} (τ₁ , τ₂) = Localize τ₁ ∗ Localize τ₂
+    Localize {Γ = site} (τ ＠ l) = τ
+    Localize {Γ = Γ₁ ∗ Γ₂} (τ₁ , τ₂) = Localize τ₁ ⊗ Localize τ₂
 
     localize' : (σ : Γ₁ ≅ Γ₂) (τ₂ : Tree[ Γ₂ ] (Located Ty)) → (Localize (Sites.permute σ τ₂) ⟶ Localize τ₂)
     localize' (σ₁ ‵∗ σ₂)       (τ₂ , τ₂') = λ(x , y) → (localize' σ₁ τ₂ x , localize' σ₂ τ₂' y)
@@ -120,21 +121,21 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     Actions' (x ⟫ y) τ₁ τ₂ = ∃[ τₘ ] Actions' x τ₁ τₘ × Actions' y τₘ τ₂
     Actions' tick τ₁ τ₂ = τ₁ ⇒' τ₂
     Actions' (perm σ) τ₁ τ₂ = τ₁ ≡ Sites.permute σ τ₂
-    Actions' fork τ₁ (τ₂ , τ₂') = (τ₁ ≡ τ₂ ∗ τ₂')
-    Actions' join (τ₁ , τ₁') τ₂ = (τ₁ ∗ τ₁' ≡ τ₂)
+    Actions' fork τ₁ (τ₂ , τ₂') = (τ₁ ≡ τ₂ ⊗ τ₂')
+    Actions' join (τ₁ , τ₁') τ₂ = (τ₁ ⊗ τ₁' ≡ τ₂)
     Actions' init _ τ₂ = 𝟙 ≡ τ₂
     Actions' term τ₁ _ = τ₁ ≡ 𝟙
 
     Epp-Γ : Tree[ Γ ] (Located Ty)
           → (Loc → Tree)
     Epp-Γ {Γ = ∅} _ self = ∅
-    Epp-Γ {Γ = site} (τ , l) self = if self ≟ l then site else ∅
+    Epp-Γ {Γ = site} (τ ＠ l) self = if self ≟ l then site else ∅
     Epp-Γ {Γ = Γ₁ ∗ Γ₂} (τ₁ , τ₂) self = Epp-Γ τ₁ self ∗ Epp-Γ τ₂ self
 
     Epp : (τ : Tree[ Γ ] (Located Ty))
         → ((self : Loc) → Tree[ Epp-Γ τ self ] Ty)
     Epp {Γ = ∅}       τ         self = τ
-    Epp {Γ = site}    (τ , l)   self with self ≟ l
+    Epp {Γ = site}    (τ ＠ l)   self with self ≟ l
     ... | true  = τ
     ... | false = tt
     Epp {Γ = Γ₁ ∗ Γ₂} (τ₁ , τ₂) self = (Epp τ₁ self , Epp τ₂ self)
@@ -165,16 +166,16 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     ... | false | false = perm (‵refl _)
     ... | true  | false = tick ⟫ term -- send dst
     ... | false | true  = init ⟫ tick -- recv src
-    epp fork (_ , l₁) _ (p₁ , Eq.refl , Eq.refl) self with self ≟ l₁
+    epp fork (_ ＠ l₁) _ (p₁ , Eq.refl , Eq.refl) self with self ≟ l₁
     ... | true  = fork
     ... | false = perm (‵unitₗ⁻¹ ∅)
-    epp join _ (_ , l₂) (p₁ , Eq.refl , Eq.refl) self with self ≟ l₂
+    epp join _ (_ ＠ l₂) (p₁ , Eq.refl , Eq.refl) self with self ≟ l₂
     ... | true  = join
     ... | false = perm (‵unitₗ ∅)
-    epp init _ (_ , l₂) acts self with self ≟ l₂
+    epp init _ (_ ＠ l₂) acts self with self ≟ l₂
     ... | true  = init
     ... | false = perm (‵refl _)
-    epp term (_ , l₁) _ acts self with self ≟ l₁
+    epp term (_ ＠ l₁) _ acts self with self ≟ l₁
     ... | true  = term
     ... | false = perm (‵refl _)
     epp (perm σ) _ _ Eq.refl _ = perm (epp-σ σ _ _)
@@ -185,24 +186,24 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
       ( epp x₁ τ₁ τₘ acts₁ self
       ⟫ epp x₂ τₘ τ₂ acts₂ self )
 
-    foo : (σ : Γ₁ ≅ Γ₂) (τ : Tree[ Γ₂ ] (Located Ty)) (self : Loc)
-        → Epp (Sites.permute σ τ) self ≡ Sites.permute (epp-σ σ τ self) (Epp τ self)
-    foo (‵refl _) τ self = Eq.refl
-    foo (‵swap a b) τ self = Eq.refl
-    foo (‵assoc a b c) τ self = Eq.refl
-    foo (‵assoc⁻¹ a b c) τ self = Eq.refl
-    foo (‵unitₗ _) τ self = Eq.refl
-    foo (‵unitₗ⁻¹ _) τ self = Eq.refl
-    foo (σ ‵∗ σ') (τ , τ') self =
+    permute-Epp : (σ : Γ₁ ≅ Γ₂) (τ : Tree[ Γ₂ ] (Located Ty)) (self : Loc)
+                → Epp (Sites.permute σ τ) self ≡ Sites.permute (epp-σ σ τ self) (Epp τ self)
+    permute-Epp (‵refl _) τ self = Eq.refl
+    permute-Epp (‵swap a b) τ self = Eq.refl
+    permute-Epp (‵assoc a b c) τ self = Eq.refl
+    permute-Epp (‵assoc⁻¹ a b c) τ self = Eq.refl
+    permute-Epp (‵unitₗ _) τ self = Eq.refl
+    permute-Epp (‵unitₗ⁻¹ _) τ self = Eq.refl
+    permute-Epp (σ ‵∗ σ') (τ , τ') self =
       Eq.cong₂ _,_
-        (foo σ τ self)
-        (foo σ' τ' self)
-    foo (‵trans σ₁ σ₂) τ self =
+        (permute-Epp σ τ self)
+        (permute-Epp σ' τ' self)
+    permute-Epp (‵trans σ₁ σ₂) τ self =
       Eq.trans
-        (foo σ₁ (Sites.permute σ₂ τ) self)
-        (Eq.cong (Sites.permute (epp-σ σ₁ (Sites.permute σ₂ τ) self)) (foo σ₂ τ self))
+        (permute-Epp σ₁ (Sites.permute σ₂ τ) self)
+        (Eq.cong (Sites.permute (epp-σ σ₁ (Sites.permute σ₂ τ) self)) (permute-Epp σ₂ τ self))
 
-    -- TODO: Generate unique IDs for each `transmi`, so that every pair of `send` and `recv` can be matched up
+    -- TODO: Generate unique IDs for each `transmit`, so that every pair of `send` and `recv` can be matched up
     -- correctly over the network. If Alice sends two messages in sequence, then Bob needs to be able to receive
     -- those messages in the same order. (Order doesn't really matter, but the point is, each `send` needs to be
     -- matched with exactly one `recv`, and vice versa.)
@@ -216,20 +217,20 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
     ... | false | false = Eq.refl
     ... | true  | false = (𝟙 , send dst , Eq.refl)
     ... | false | true  = (𝟙 , Eq.refl , recv src)
-    epp-acts fork (_ , l₁) _ (Eq.refl , Eq.refl , Eq.refl) self with self ≟ l₁
+    epp-acts fork (_ ＠ l₁) _ (Eq.refl , Eq.refl , Eq.refl) self with self ≟ l₁
     ... | true  = Eq.refl
     ... | false = Eq.refl
-    epp-acts join _ (_ , l₂) (Eq.refl , Eq.refl , Eq.refl) self with self ≟ l₂
+    epp-acts join _ (_ ＠ l₂) (Eq.refl , Eq.refl , Eq.refl) self with self ≟ l₂
     ... | true  = Eq.refl
     ... | false = Eq.refl
-    epp-acts init _ (_ , l₂) m self with self ≟ l₂
+    epp-acts init _ (_ ＠ l₂) m self with self ≟ l₂
     ... | true  = m
     ... | false = Eq.refl
-    epp-acts term (_ , l₁) _ m self with self ≟ l₁
+    epp-acts term (_ ＠ l₁) _ m self with self ≟ l₁
     ... | true  = m
     ... | false = Eq.refl
     epp-acts (perm σ) τ₁ τ₂ Eq.refl self
-      = foo σ τ₂ self
+      = permute-Epp σ τ₂ self
     epp-acts (x  ∥ x') (τ₁ , τ₁') (τ₂ , τ₂') (acts₁ , acts₂) self =
       ( epp-acts x  τ₁  τ₂  acts₁ self
       , epp-acts x' τ₁' τ₂' acts₂ self )
@@ -237,4 +238,3 @@ module Choreographies.Foo {Loc : Type} {_≟_ : (_ _ : Loc) → Bool} where
       ( Epp τₘ self
       , epp-acts x₁ τ₁ τₘ acts₁ self
       , epp-acts x₂ τₘ τ₂ acts₂ self )
-```
