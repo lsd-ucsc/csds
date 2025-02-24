@@ -38,12 +38,18 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
     using (These; this; that; these)
   open import Data.List
     using (List; []; _∷_; [_])
+  open import Data.List.Relation.Unary.Any
+    using (here; there)
   open import Relation.Nullary.Negation
     using (¬_)
   open import Relation.Nullary.Decidable
     using (Dec; does; _because_; yes; no; _⊎-dec_)
+  open import Relation.Nullary.Reflects
+    using (Reflects)
   open import Data.List.Membership.DecPropositional _≟_
-    using (_∈?_)
+    using (_∈_; _∈?_)
+  open import Data.List.Relation.Binary.Subset.DecPropositional _≟_
+    using (_⊆_; _⊆?_)
   open import Relation.Binary.PropositionalEquality
     as Eq
     using (_≡_)
@@ -52,10 +58,59 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   infixl 24 _⊕_
   infix  23 _＠_
   infixl 22 _∗_
-  infix  21 _+_
-  infix  20 _⇶_
+  infixl 21 _+_
+  infix  20 Choreo
+
+  syntax Choreo ls Γ Γ' = Γ ⇶[ ls ] Γ'
 ```
 </details>
+
+  Problem 1: To project a heap `Γ₁ + Γ₂` onto a choreographic role `self`,
+we need to know whether `self` "knows about" the choice modeled by the sum.
+If it doesn't, then the whole sum projects down to `none`: the absence of state,
+rather than present state void of information (as `some 𝟙` would mean).
+If it *does*, then the sum projects down to a `some _` of a (local) sum, which
+may very well be `some (𝟙 ⊕ 𝟙)` if `self` owns no other state (or only owns `𝟙`s).
+Thus, we need to keep track of which sites "know about" a choice.
+
+  Problem 2: We need to get state from *outside* a sum, *into* that sum. We also
+need to get state from *inside* a sum, *out of* that sum. This allows participants
+who *don't* know about the choice to nonetheless interact with agents who *do*, so
+long as those interactions are *structurally* independent of the choice. Getting
+state out of a sum is easy: if you have two sites on either side of a choice, owned
+by the same participant, with data of the same type, then you can "factor out" those
+sites into a single site outside the choice. Getting state *into* a sum is harder:
+the state needs to be on a site whose choreographic participant is aware of that choice.
+If the site is not aware of that choice, then they cannot distribute over the choice.
+
+  Problem 3: Communication under a choice can only occur between participants who are
+*aware* of that choice. Otherwise, communication could happen that is not structurally
+independent of the choice. Likewise, initiating a new site under a choice can only happen
+if that site is owned by a participant who is aware of that choice.
+
+  Problem 4: Sums "ought to be" associative, but operationalizing associativity is not
+obvious. A sum like `(a + b) + c` indicates a choice X made in context of another choice Y;
+there are then three possibilities: (X ∧ Y), (X ∧ ¬Y), and ¬X. Reassociating to `a + (b + c)`
+implies reparametrizing against choices X' and Y', for which there are three possibilities:
+X', (¬X' ∧ Y'), (¬X' ∧ ¬Y'). In other words: X' ≡ X ∧ Y, and Y' ≡ (X ⇒ ¬Y). Then knowledge
+of the outer choice is given by a determination on X', for which truth pins down the original
+values of both X and Y, and falsity still leaves both choices open (as well as the question of
+whether choice Y was even made, given that it doesn't occur in the ¬X case). It is particularly
+unclear what the sets of participants who know about each choice should be.
+
+  Remark 1: It is clear that modeling the set of participants who "know about" a choice,
+and modeling the dynamics of that set over time, is paramount. Moreover, this knowledge
+is not only relevant at the interface between a choice and its environment, but also
+deep within the body of the choice, where communication must be restricted to like-informed
+participants. How is this set modeled? We could say that any participant *with state* under
+the choice knows about the choice, but this appears to give too many responsibilities: bringing
+state under the choice *simultaneously requires* that the participant be notified by someone
+who is already present in the choice. Nonetheless, it is certainly true that, if a participant
+has state under a choice, then they must know about it.
+
+  Remark 2: It seems, then, that we must constrain leaf-level communication-like actions
+(namely, `transmit` and `init`) to only those locations that are available within the surrounding
+heap.
 
 ```agda
   data Ty : Type where
@@ -72,63 +127,93 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   τ₁ ⟶ τ₂ = ⟦ τ₁ ⟧ → ⟦ τ₂ ⟧
 
 
-  data ChoreoHeap : Type where
-    ∅    : ChoreoHeap
-    _＠_ : Ty → Loc → ChoreoHeap
-    _∗_  : (_ _ : ChoreoHeap) → ChoreoHeap
-    _+_  : (_ _ : ChoreoHeap) → ChoreoHeap
+  data ChoreoHeap (ls : List Loc) : Type where
+    -- an empty heap
+    ∅        : ChoreoHeap ls
+    -- a discrete site owned by one of the `ls`.
+    _＠_     : Ty → (l : Loc) → {{Reflects (l ∈ ls) true}} → ChoreoHeap ls
+    -- restrict knowledge of a heap to locations on an explicit allowlist
+    restrict : ∀ ls' → {{Reflects (ls' ⊆ ls) true}} → ChoreoHeap ls' → ChoreoHeap ls
+    -- a pair of separated heaps split among all `ls`.
+    _∗_      : (_ _ : ChoreoHeap ls) → ChoreoHeap ls
+    -- a choice between heaps whose determination is known to all `ls`
+    _+_      : (_ _ : ChoreoHeap ls) → ChoreoHeap ls
+
+  unrestrict : {ls' ls : List Loc} → ChoreoHeap ls' → {{Reflects (ls' ⊆ ls) true}} → ChoreoHeap ls
+  unrestrict ∅ = ∅
+  unrestrict ((x ＠ l) ⦃ Reflects.ofʸ p ⦄) ⦃ Reflects.ofʸ a ⦄ = (x ＠ l) ⦃ Reflects.ofʸ (a {l} p) ⦄
+  unrestrict (restrict ls' ⦃ Reflects.ofʸ a ⦄ Γ) ⦃ Reflects.ofʸ b ⦄ = restrict ls' ⦃ Reflects.ofʸ (b ∘ a) ⦄ Γ
+  unrestrict (Γ ∗ Γ') = unrestrict Γ ∗ unrestrict Γ'
+  unrestrict (Γ + Γ') = unrestrict Γ + unrestrict Γ'
+
 
   variable
-    Γ  Γ₁  Γ₂  Γ₃  : ChoreoHeap
-    Γ' Γ₁' Γ₂' Γ₃' : ChoreoHeap
+    Γ  Γ₁  Γ₂  Γ₃  : ChoreoHeap _
+    Γ' Γ₁' Γ₂' Γ₃' : ChoreoHeap _
 
-  data _⇶_ : (_ _ : ChoreoHeap) → Type where
-    id : ∀ Γ → Γ ⇶ Γ
-
-    -- concurrent composition over products
-    _∥_ : (Γ₁       ⇶ Γ₂      )
-        → (     Γ₁' ⇶      Γ₂')
-        → (Γ₁ ∗ Γ₁' ⇶ Γ₂ ∗ Γ₂')
-
-    -- concurrent composition over sums
-    _◇_ : (Γ₁       ⇶ Γ₂)
-        → (     Γ₁' ⇶ Γ₂)
-        → (Γ₁ + Γ₁' ⇶ Γ₂)
-
-    -- sequential composition
-    _;_ : (x₁ : Γ₁ ⇶ Γ₂)
-        → (x₂ : Γ₂ ⇶ Γ₃)
-        → (Γ₁ ⇶ Γ₃)
-
-    -- a local computation at a site
-    locally : ∀{a b} l → (a ⟶ b) → ((a ＠ l) ⇶ (b ＠ l))
-    -- transferrence of state between chroreographic locations
-    transmit : ∀{a} l₁ l₂ → (a ＠ l₁) ⇶ (a ＠ l₂)
-
-    -- the creation of a site
-  --init : ∀ l → ∅ ⇶ (𝟙 ＠ l)
-    -- the destruction of a site
-  --term : ∀ l → (𝟙 ＠ l) ⇶ ∅
-
-    -- the factorization of one site into two
-    fork : ∀ l a b → (a ⊗ b ＠ l) ⇶ (a ＠ l ∗ b ＠ l)
-    -- the assimilation of two sites into one
-    join : ∀ l a b → (a ＠ l) ∗ (b ＠ l) ⇶ (a ⊗ b ＠ l)
-
-    -- the superposition of one site in two possibilities
-    branch : ∀ l a b → (a ⊕ b ＠ l) ⇶ (a ＠ l + b ＠ l)
-    -- products can distribute over sums
-    distrib : (Γ₁ + Γ₂ ∗ Γ₃) ⇶ ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃))
-    -- distrib⁻¹ : ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) ⇶ (Γ₁ + Γ₂ ∗ Γ₃)
+  data Choreo (ls : List Loc) : (_ _ : ChoreoHeap ls) → Type where
+    id : ∀ Γ → Γ ⇶[ ls ] Γ
 
     -- permutations on sites
-    swap    : ∀ Γ₁ Γ₂    → (Γ₁ ∗ Γ₂) ⇶ (Γ₂ ∗ Γ₁)
-    assoc   : ∀ Γ₁ Γ₂ Γ₃ → ((Γ₁ ∗  Γ₂) ∗ Γ₃ ) ⇶ ( Γ₁ ∗ (Γ₂  ∗ Γ₃))
-    assoc⁻¹ : ∀ Γ₁ Γ₂ Γ₃ → ( Γ₁ ∗ (Γ₂  ∗ Γ₃)) ⇶ ((Γ₁ ∗  Γ₂) ∗ Γ₃ )
-  --unitₗ   : ∀ Γ        → (∅ ∗ Γ) ⇶      Γ
-  --unitₗ⁻¹ : ∀ Γ        →      Γ  ⇶ (∅ ∗ Γ)
+    swap    : ∀ Γ₁ Γ₂    → (Γ₁ ∗ Γ₂) ⇶[ ls ] (Γ₂ ∗ Γ₁)
+    assoc   : ∀ Γ₁ Γ₂ Γ₃ → ((Γ₁ ∗  Γ₂) ∗ Γ₃ ) ⇶[ ls ] ( Γ₁ ∗ (Γ₂  ∗ Γ₃))
+    assoc⁻¹ : ∀ Γ₁ Γ₂ Γ₃ → ( Γ₁ ∗ (Γ₂  ∗ Γ₃)) ⇶[ ls ] ((Γ₁ ∗  Γ₂) ∗ Γ₃ )
+  --unitₗ   : ∀ Γ        → (∅ ∗ Γ) ⇶[ ls ]      Γ
+  --unitₗ⁻¹ : ∀ Γ        →      Γ  ⇶[ ls ] (∅ ∗ Γ)
 
+    -- products can distribute over sums
+    distrib   : (Γ₁ + Γ₂ ∗ Γ₃) ⇶[ ls ] ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃))
+    distrib⁻¹ : ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) ⇶[ ls ] (Γ₁ + Γ₂ ∗ Γ₃)
 
+    -- sequential composition
+    _;_ : (x₁ : Γ₁ ⇶[ ls ] Γ₂)
+        → (x₂ : Γ₂ ⇶[ ls ] Γ₃)
+        → (Γ₁ ⇶[ ls ] Γ₃)
+
+    -- concurrent composition over products
+    _∥_ : (Γ₁       ⇶[ ls ] Γ₂      )
+        → (     Γ₁' ⇶[ ls ]      Γ₂')
+        → (Γ₁ ∗ Γ₁' ⇶[ ls ] Γ₂ ∗ Γ₂')
+
+    -- concurrent composition over sums
+    _◇_ : (Γ₁       ⇶[ ls ] Γ₂)
+        → (     Γ₁' ⇶[ ls ] Γ₂')
+        → (Γ₁ + Γ₁' ⇶[ ls ] Γ₂ + Γ₂')
+
+    -- a local computation at a site
+    locally : ∀{a b} l {{_ : Reflects (l ∈ ls) true}} → (a ⟶ b) → ((a ＠ l) ⇶[ ls ] (b ＠ l))
+    -- transferrence of state between chroreographic locations
+    transmit : ∀{a} l₁ {{_ : Reflects (l₁ ∈ ls) true}} l₂ {{_ : Reflects (l₂ ∈ ls) true}} → (a ＠ l₁) ⇶[ ls ] (a ＠ l₂)
+
+    -- the creation of a site
+    init : ∀ l {{_ : Reflects (l ∈ ls) true}} → ∅ ⇶[ ls ] (𝟙 ＠ l)
+    -- the destruction of a site
+    term : ∀ l {{_ : Reflects (l ∈ ls) true}} → (𝟙 ＠ l) ⇶[ ls ] ∅
+
+    -- the factorization of one site into two
+    fork : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ⊗ b ＠ l) ⇶[ ls ] (a ＠ l ∗ b ＠ l)
+    -- the assimilation of two sites into one
+    join : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ＠ l ∗ b ＠ l) ⇶[ ls ] (a ⊗ b ＠ l)
+
+    -- the externalization of two possibilities at one site
+    branch   : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ⊕ b ＠ l) ⇶[ ls ] (a ＠ l + b ＠ l)
+    -- the internalization of two possibilities at one site
+    coalesce : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ＠ l + b ＠ l) ⇶[ ls ] (a ⊕ b ＠ l)
+
+    notify : ∀ ls' {{_ : Reflects (ls' ⊆ ls) true}}
+           → (Γ : ChoreoHeap ls')
+           → restrict ls' Γ ⇶[ ls ] unrestrict Γ
+
+    enclose : ∀ ls' {{_ : Reflects (ls' ⊆ ls) true}}
+            → (Γ : ChoreoHeap ls')
+            → unrestrict Γ ⇶[ ls ] restrict ls' Γ
+
+    -- todo: `restrict` units, i.e. `restrict ls Γ ⇶[ ls ] Γ` (matching the outer)
+    -- todo: `restrict` combinations, i.e. `restrict ls' (restrict ls'' Γ) ⇶[ ls ] restrict ls'' Γ` (matching the inner)
+    -- todo: motion across `restrict`, i.e. `restrict ls' Γ ∗ Γ' ⇶[ ls ] restrict ls' (Γ ∗ Γ')`
+    -- todo: `restrict` distribution, i.e. `restrict ls' (Γ ∗ Γ') ⇶[ ls ] restrict ls' Γ ∗ restrict ls' Γ'`
+
+{-
   data NetworkProgram : Type where
     pure : (τ₁ : Ty) → ⟦ τ₁ ⟧ → NetworkProgram
     send : (τ : Ty) (id : ℕ) (payload : ⟦ τ ⟧) → (⊤ → NetworkProgram) → NetworkProgram
@@ -255,5 +340,6 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) l i k = {!!}
   epp (unitₗ _) l i k = {!!}
   epp (unitₗ⁻¹ _) l i k = {!!}
+-}
 -}
 ```
