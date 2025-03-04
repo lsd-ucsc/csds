@@ -23,7 +23,7 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   open import Data.Empty
     using (⊥)
   open import Data.Product
-    using (_×_; _,_; ∃-syntax)
+    using (_×_; _,_; ∃-syntax; proj₁; proj₂)
   open import Data.Sum
     using (_⊎_)
   open import Data.Nat
@@ -59,9 +59,7 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   infix  23 _＠_
   infixl 22 _∗_
   infixl 21 _+_
-  infix  20 Choreo
-
-  syntax Choreo ls Γ Γ' = Γ ⇶[ ls ] Γ'
+  infix  20 _⇶_
 ```
 </details>
 
@@ -127,97 +125,109 @@ heap.
   τ₁ ⟶ τ₂ = ⟦ τ₁ ⟧ → ⟦ τ₂ ⟧
 
 
-  data ChoreoHeap (ls : List Loc) : Type where
+  data ChoreoHeap : Type where
     -- an empty heap
-    ∅        : ChoreoHeap ls
-    -- a discrete site owned by one of the `ls`.
-    _＠_     : Ty → (l : Loc) → {{Reflects (l ∈ ls) true}} → ChoreoHeap ls
-    -- restrict knowledge of a heap to locations on an explicit allowlist
-    restrict : ∀ ls' → {{Reflects (ls' ⊆ ls) true}} → ChoreoHeap ls' → ChoreoHeap ls
-    -- a pair of separated heaps split among all `ls`.
-    _∗_      : (_ _ : ChoreoHeap ls) → ChoreoHeap ls
-    -- a choice between heaps whose determination is known to all `ls`
-    _+_      : (_ _ : ChoreoHeap ls) → ChoreoHeap ls
-
-  unrestrict : {ls' ls : List Loc} → ChoreoHeap ls' → {{Reflects (ls' ⊆ ls) true}} → ChoreoHeap ls
-  unrestrict ∅ = ∅
-  unrestrict ((x ＠ l) ⦃ Reflects.ofʸ p ⦄) ⦃ Reflects.ofʸ a ⦄ = (x ＠ l) ⦃ Reflects.ofʸ (a {l} p) ⦄
-  unrestrict (restrict ls' ⦃ Reflects.ofʸ a ⦄ Γ) ⦃ Reflects.ofʸ b ⦄ = restrict ls' ⦃ Reflects.ofʸ (b ∘ a) ⦄ Γ
-  unrestrict (Γ ∗ Γ') = unrestrict Γ ∗ unrestrict Γ'
-  unrestrict (Γ + Γ') = unrestrict Γ + unrestrict Γ'
+    ∅        : ChoreoHeap
+    -- a discrete site owned by some location
+    _＠_     : Ty → (l : Loc) → ChoreoHeap
+    -- a pair of separated heaps
+    _∗_      : (_ _ : ChoreoHeap) → ChoreoHeap
+    -- a choice between heaps
+    _+_      : (_ _ : ChoreoHeap) → ChoreoHeap
 
 
   variable
-    Γ  Γ₁  Γ₂  Γ₃  : ChoreoHeap _
-    Γ' Γ₁' Γ₂' Γ₃' : ChoreoHeap _
+    Γ  Γ₁  Γ₂  Γ₃  : ChoreoHeap
+    Γ' Γ₁' Γ₂' Γ₃' : ChoreoHeap
 
-  data Choreo (ls : List Loc) : (_ _ : ChoreoHeap ls) → Type where
-    id : ∀ Γ → Γ ⇶[ ls ] Γ
+  data _⇶_ : (_ _ : ChoreoHeap) → Type where
+    id : ∀ Γ → Γ ⇶ Γ
 
     -- permutations on sites
-    swap    : ∀ Γ₁ Γ₂    → (Γ₁ ∗ Γ₂) ⇶[ ls ] (Γ₂ ∗ Γ₁)
-    assoc   : ∀ Γ₁ Γ₂ Γ₃ → ((Γ₁ ∗  Γ₂) ∗ Γ₃ ) ⇶[ ls ] ( Γ₁ ∗ (Γ₂  ∗ Γ₃))
-    assoc⁻¹ : ∀ Γ₁ Γ₂ Γ₃ → ( Γ₁ ∗ (Γ₂  ∗ Γ₃)) ⇶[ ls ] ((Γ₁ ∗  Γ₂) ∗ Γ₃ )
-  --unitₗ   : ∀ Γ        → (∅ ∗ Γ) ⇶[ ls ]      Γ
-  --unitₗ⁻¹ : ∀ Γ        →      Γ  ⇶[ ls ] (∅ ∗ Γ)
+    swap    : ∀ Γ₁ Γ₂    → (Γ₁ ∗ Γ₂) ⇶ (Γ₂ ∗ Γ₁)
+    assoc   : ∀ Γ₁ Γ₂ Γ₃ → ((Γ₁ ∗  Γ₂) ∗ Γ₃ ) ⇶ ( Γ₁ ∗ (Γ₂  ∗ Γ₃))
+    assoc⁻¹ : ∀ Γ₁ Γ₂ Γ₃ → ( Γ₁ ∗ (Γ₂  ∗ Γ₃)) ⇶ ((Γ₁ ∗  Γ₂) ∗ Γ₃ )
+  --unitₗ   : ∀ Γ        →      Γ  ⇶ (∅ ∗ Γ)
+  --unitₗ⁻¹ : ∀ Γ        → (∅ ∗ Γ) ⇶      Γ
 
     -- products can distribute over sums
-    distrib   : (Γ₁ + Γ₂ ∗ Γ₃) ⇶[ ls ] ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃))
-    distrib⁻¹ : ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) ⇶[ ls ] (Γ₁ + Γ₂ ∗ Γ₃)
+    distrib   : ((Γ₁ + Γ₂) ∗ Γ₃) ⇶ ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃))
+    distrib⁻¹ : ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) ⇶ ((Γ₁ + Γ₂) ∗ Γ₃)
 
     -- sequential composition
-    _;_ : (x₁ : Γ₁ ⇶[ ls ] Γ₂)
-        → (x₂ : Γ₂ ⇶[ ls ] Γ₃)
-        → (Γ₁ ⇶[ ls ] Γ₃)
+    _;_ : (x₁ : Γ₁ ⇶ Γ₂)
+        → (x₂ : Γ₂ ⇶ Γ₃)
+        → (Γ₁ ⇶ Γ₃)
 
     -- concurrent composition over products
-    _∥_ : (Γ₁       ⇶[ ls ] Γ₂      )
-        → (     Γ₁' ⇶[ ls ]      Γ₂')
-        → (Γ₁ ∗ Γ₁' ⇶[ ls ] Γ₂ ∗ Γ₂')
+    _∥_ : (Γ₁       ⇶ Γ₂      )
+        → (     Γ₁' ⇶      Γ₂')
+        → (Γ₁ ∗ Γ₁' ⇶ Γ₂ ∗ Γ₂')
 
     -- concurrent composition over sums
-    _◇_ : (Γ₁       ⇶[ ls ] Γ₂)
-        → (     Γ₁' ⇶[ ls ] Γ₂')
-        → (Γ₁ + Γ₁' ⇶[ ls ] Γ₂ + Γ₂')
+    _◇_ : (Γ₁       ⇶ Γ₂)
+        → (     Γ₁' ⇶ Γ₂')
+        → (Γ₁ + Γ₁' ⇶ Γ₂ + Γ₂')
 
     -- a local computation at a site
-    locally : ∀{a b} l {{_ : Reflects (l ∈ ls) true}} → (a ⟶ b) → ((a ＠ l) ⇶[ ls ] (b ＠ l))
+    locally : ∀{a b} l → (a ⟶ b) → ((a ＠ l) ⇶ (b ＠ l))
     -- transferrence of state between chroreographic locations
-    transmit : ∀{a} l₁ {{_ : Reflects (l₁ ∈ ls) true}} l₂ {{_ : Reflects (l₂ ∈ ls) true}} → (a ＠ l₁) ⇶[ ls ] (a ＠ l₂)
+    transmit : ∀{a} l₁ l₂ → (a ＠ l₁) ⇶ (a ＠ l₂)
 
     -- the creation of a site
-    init : ∀ l {{_ : Reflects (l ∈ ls) true}} → ∅ ⇶[ ls ] (𝟙 ＠ l)
+    init : ∀ l → ∅ ⇶ (𝟙 ＠ l)
     -- the destruction of a site
-    term : ∀ l {{_ : Reflects (l ∈ ls) true}} → (𝟙 ＠ l) ⇶[ ls ] ∅
+    term : ∀ l → (𝟙 ＠ l) ⇶ ∅
 
     -- the factorization of one site into two
-    fork : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ⊗ b ＠ l) ⇶[ ls ] (a ＠ l ∗ b ＠ l)
+    fork : ∀ l a b → (a ⊗ b ＠ l) ⇶ (a ＠ l ∗ b ＠ l)
     -- the assimilation of two sites into one
-    join : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ＠ l ∗ b ＠ l) ⇶[ ls ] (a ⊗ b ＠ l)
+    join : ∀ l a b → (a ＠ l ∗ b ＠ l) ⇶ (a ⊗ b ＠ l)
 
     -- the externalization of two possibilities at one site
-    branch   : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ⊕ b ＠ l) ⇶[ ls ] (a ＠ l + b ＠ l)
+    branch   : ∀ l a b → (a ⊕ b ＠ l) ⇶ (a ＠ l + b ＠ l)
     -- the internalization of two possibilities at one site
-    coalesce : ∀ l {{_ : Reflects (l ∈ ls) true}} a b → (a ＠ l + b ＠ l) ⇶[ ls ] (a ⊕ b ＠ l)
+    coalesce : ∀ l a b → (a ＠ l + b ＠ l) ⇶ (a ⊕ b ＠ l)
 
-    notify : ∀ ls' {{_ : Reflects (ls' ⊆ ls) true}}
-           → (Γ : ChoreoHeap ls')
-           → restrict ls' Γ ⇶[ ls ] unrestrict Γ
+    -- TODO: add this operator: (a * b) + (c * d) ⇶ (a + c) * (b + d)
+    --       so that `idem` is expressible
 
-    enclose : ∀ ls' {{_ : Reflects (ls' ⊆ ls) true}}
-            → (Γ : ChoreoHeap ls')
-            → unrestrict Γ ⇶[ ls ] restrict ls' Γ
+  _⇒_ : Ty → Ty → Type
+  data NetworkProgram : Type
 
-    -- todo: `restrict` units, i.e. `restrict ls Γ ⇶[ ls ] Γ` (matching the outer)
-    -- todo: `restrict` combinations, i.e. `restrict ls' (restrict ls'' Γ) ⇶[ ls ] restrict ls'' Γ` (matching the inner)
-    -- todo: motion across `restrict`, i.e. `restrict ls' Γ ∗ Γ' ⇶[ ls ] restrict ls' (Γ ∗ Γ')`
-    -- todo: `restrict` distribution, i.e. `restrict ls' (Γ ∗ Γ') ⇶[ ls ] restrict ls' Γ ∗ restrict ls' Γ'`
+  τ₁ ⇒ τ₂ = ⟦ τ₁ ⟧ → (⟦ τ₂ ⟧ → NetworkProgram) → NetworkProgram
+
+  data NetworkProgram where
+    {- F(X) = ( ((τ : Ty) × ⟦ τ ⟧)       -- pure
+              + ((τ : Ty) × ℕ × ⟦ τ ⟧)   -- send
+              + ((τ : Ty) × ℕ × X^⟦ τ ⟧) -- recv
+              )
+    -}
+    -- (τ : Ty, ⟦ τ ⟧) ↝ ⊤
+    pure : (τ : Ty) → ⟦ τ ⟧ → NetworkProgram
+    -- (τ : Ty, ℕ, ⟦ τ ⟧) ↝ ⊤
+    send : (τ : Ty) (id : Loc) (payload : ⟦ τ ⟧) → (⊤ → NetworkProgram) → NetworkProgram
+    -- (τ : Ty, ℕ) ↝ ⟦ τ ⟧
+    recv : (τ : Ty) (id : Loc) → (⟦ τ ⟧ → NetworkProgram) → NetworkProgram
+    --
+    broadcast : Bool → (⊤ → NetworkProgram) → NetworkProgram
+    recvbcast : (Bool → NetworkProgram) → NetworkProgram
+    -- TODO: come up with a `par` combinator that Agda would accept.
+    -- TODO: uniquely identify messages (i.e. add a uniquely-generated ℕ)
+    --       and maybe consider removing the id:Loc parameter (if it can be
+    --       recovered from an id-to-receiver table)
+    -- TODO: implement broadcast and recvbcast in terms of send and recv
 
 {-
-  data NetworkProgram : Type where
-    pure : (τ₁ : Ty) → ⟦ τ₁ ⟧ → NetworkProgram
-    send : (τ : Ty) (id : ℕ) (payload : ⟦ τ ⟧) → (⊤ → NetworkProgram) → NetworkProgram
-    recv : (τ : Ty) (id : ℕ) → (⟦ τ ⟧ → NetworkProgram) → NetworkProgram
+  fleh : (⟦ τ₁ ⟧ → NetworkProgram) → (⟦ τ₂ ⟧ → NetworkProgram) → (⟦ τ₁ ⊗ τ₂ ⟧ → NetworkProgram)
+-}
+
+    --par : (NetworkProgram × NetworkProgram) → NetworkProgram
+-- (τ₁ τ₂ : Ty)
+-- → ((⟦ τ₁ ⟧ → NetworkProgram) → NetworkProgram)
+-- → ((⟦ τ₂ ⟧ → NetworkProgram) → NetworkProgram)
+-- → (⟦ τ₂ ⟧ × ⟦ τ₂ ⟧ → NetworkProgram)
+
 
   _in:_ : Loc → ChoreoHeap → Type
   self in: ∅        = ⊥
@@ -252,6 +262,7 @@ heap.
   bbb (some (these a b)) = some a , some b
   bbb none = none , none
 
+{-
   Foo : (Γ₁ ⇶ Γ₂) → Maybe (Selector Γ₁) → Maybe (Selector Γ₂) → Type
   Foo (id _) s₁ s₂ = s₁ ≡ s₂
   Foo (x ∥ x') s₁ s₂ =
@@ -287,6 +298,7 @@ heap.
   Foo (swap Γ₁ Γ₂) s₁ s₂ = {!!}
   Foo (assoc Γ₁ Γ₂ Γ₃) s₁ s₂ = {!!}
   Foo (assoc⁻¹ Γ₁ Γ₂ Γ₃) s₁ s₂ = {!!}
+-}
 
   select : (Γ : ChoreoHeap) → Loc → Maybe (Selector Γ)
   select ∅        self = none
@@ -294,6 +306,7 @@ heap.
   select (Γ ∗ Γ') self = select Γ self ddd: select Γ' self
   select (Γ + Γ') self = select Γ self ddd: select Γ' self
 
+{-
   Epp : (Γ : ChoreoHeap) → Maybe (Selector Γ) → Ty
   Epp Γ = Maybe.fromMaybe 𝟙 ∘ Maybe.map (go Γ)
     where
@@ -305,6 +318,7 @@ heap.
       go (Γ + Γ') (this  s)    = go Γ s ⊕ 𝟙
       go (Γ + Γ') (that    s') =      𝟙 ⊕ go Γ' s'
       go (Γ + Γ') (these s s') = go Γ s ⊕ go Γ' s'
+-}
 
 {-
   Epp : (Γ : ChoreoHeap) → Loc → Ty
@@ -315,31 +329,113 @@ heap.
   ... | true  because _ | false because _ = Epp Γ₁ self
   ... | false because _ | true because  _ = Epp Γ₂ self
   ... | false because _ | false because _ = 𝟙
-  Epp (Γ₁ + Γ₂) self = if does (self ∈? ls) then Epp Γ₁ self ⊕ Epp Γ₂ self else 𝟙
+  Epp (Γ₁ + Γ₂) self = Epp Γ₁ self ⊕ Epp Γ₂ self
+-}
 
-  epp : (Γ₁ ⇶ Γ₂) → (l : Loc) → ⟦ Epp Γ₁ l ⟧ → (⟦ Epp Γ₂ l ⟧ → NetworkProgram) → NetworkProgram
-  epp (id _) self i k = k i
-  epp {Γ₁ = Γ₁ ∗ Γ₁'} {Γ₂ = Γ₂ ∗ Γ₂'} (x  ∥ x') self (i , i') k =
-    epp x  self i  λ o  →
-    epp x' self i' λ o' →
-    k (o , o')
-  epp (x  ◇[ ls ] x') self i k with self ∈? ls | i
-  ... | yes p | _ = {!!}
-  ... | no ¬p | _ = {!!}
-  epp (x₁ ; x') l i k = {!!}
-  epp (locally l₁ x) l i k = {!!}
-  epp (transmit l₁ l₂) l i k = {!!}
-  epp (init l₁) l i k = {!!}
-  epp (term l₁) l i k = {!!}
-  epp (fork l₁ a b) l i k = {!!}
-  epp (join l₁ a b) l i k = {!!}
-  epp (branch l₁ a b) l i k = {!!}
-  epp distrib l i k = {!!}
-  epp (swap Γ₁ Γ₂) l i k = {!!}
-  epp (assoc Γ₁ Γ₂ Γ₃) l i k = {!!}
-  epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) l i k = {!!}
-  epp (unitₗ _) l i k = {!!}
-  epp (unitₗ⁻¹ _) l i k = {!!}
--}
--}
+  Epp : (Γ : ChoreoHeap) → Loc → Ty
+  Epp ∅         self = 𝟙
+  Epp (τ ＠ l)  self = if does (l ≟ self) then τ else 𝟙
+  Epp (Γ₁ ∗ Γ₂) self = Epp Γ₁ self ⊗ Epp Γ₂ self
+  Epp (Γ₁ + Γ₂) self = Epp Γ₁ self ⊕ Epp Γ₂ self
+
+  -- ⟦ Epp Γ₁ l ⟧ ⇒ ⟦ Epp Γ₂ l ⟧
+  epp : (Γ₁ ⇶ Γ₂) → (l : Loc) → (Epp Γ₁ l ⇒ Epp Γ₂ l)
+  epp (id _) self i k =
+    k i
+  epp (swap Γ₁ Γ₂) self (i₁ , i₂) k =
+    k (i₂ , i₁)
+  epp (assoc Γ₁ Γ₂ Γ₃) self ((i₁ , i₂) , i₃) k =
+    k (i₁ , (i₂ , i₃))
+  epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) self (i₁ , (i₂ , i₃)) k =
+    k ((i₁ , i₂) , i₃)
+  epp distrib self (_⊎_.inj₁ x , z) k =
+    k (_⊎_.inj₁ (x , z))
+  epp distrib self (_⊎_.inj₂ y , z) k =
+    k (_⊎_.inj₂ (y , z))
+  epp distrib⁻¹ self (_⊎_.inj₁ (x , z)) k =
+    k (_⊎_.inj₁ x , z)
+  epp distrib⁻¹ self (_⊎_.inj₂ (y , z)) k =
+    k (_⊎_.inj₂ y , z)
+  --
+  epp (x₁ ; x₂) self i k =
+    epp x₁ self i  λ i'  →
+    epp x₂ self i' λ i'' →
+    k i''
+  epp (x  ∥ x') self (i₁ , i₁') k =
+    -- TODO: find some way to bind over both i₂ and i₂' without sequencing them?
+    epp x  self i₁  λ i₂  →
+    epp x' self i₁' λ i₂' →
+    let _ = ? in
+    k (i₂ , i₂')
+  epp (x ◇ x') self (_⊎_.inj₁ i₁ ) k =
+    epp x self i₁ λ i₂ →
+    k (_⊎_.inj₁ i₂)
+  epp (x ◇ x') self (_⊎_.inj₂ i₁') k =
+    epp x' self i₁' λ i₂' →
+    k (_⊎_.inj₂ i₂')
+  epp (locally l f) self i k with l ≟ self
+  ... | yes _ = k (f i)
+  ... | no  _ = k i
+  epp (transmit l₁ l₂) self i k with l₁ ≟ self | l₂ ≟ self
+  ... | no  _ | no  _ = k i
+  ... | no  _ | yes _ = recv _ l₁   k
+  ... | yes _ | no  _ = send _ l₂ i k
+  ... | yes _ | yes _ = k i
+  epp (init l) self i k with l ≟ self
+  ... | no  _ = k i
+  ... | yes _ = k i
+  epp (term l) self with l ≟ self
+  ... | no  _ = λ i k → k i
+  ... | yes _ = λ i k → k i
+  epp (fork l a b) self with l ≟ self
+  ... | no  _ = λ i        k → k (i , i)
+  ... | yes _ = λ (i , i') k → k (i , i')
+  epp (join l a b) self (i , i') k with l ≟ self
+  ... | no  _ = k tt
+  ... | yes _ = k (i , i')
+  epp (branch l a b) self with l ≟ self
+  ... | no  _ = λ i k →
+    recvbcast λ
+      { false → k (_⊎_.inj₁ i)
+      ; true  → k (_⊎_.inj₂ i)
+      }
+  ... | yes _ = λ
+    { (_⊎_.inj₁ x) k →
+        broadcast false λ _ →
+        k (_⊎_.inj₁ x)
+    ; (_⊎_.inj₂ y) k →
+        broadcast true λ _ →
+        k (_⊎_.inj₂ y)
+    }
+  epp (coalesce l a b) self i k with l ≟ self
+  ... | no  _ = k tt
+  ... | yes _ = k i
+
+  Centralized : ChoreoHeap → Ty
+  Centralized ∅         = 𝟙
+  Centralized (τ ＠ l)  = τ
+  Centralized (Γ₁ ∗ Γ₂) = Centralized Γ₁ ⊗ Centralized Γ₂
+  Centralized (Γ₁ + Γ₂) = Centralized Γ₁ ⊕ Centralized Γ₂
+
+  centralized : (Γ₁ ⇶ Γ₂) → (⟦ Centralized Γ₁ ⟧ → ⟦ Centralized Γ₂ ⟧)
+  centralized (id _) i = i
+  centralized (swap Γ₁ Γ₂) (fst , snd) = snd , fst
+  centralized (assoc Γ₁ Γ₂ Γ₃) ((fst , snd₁) , snd) = fst , snd₁ , snd
+  centralized (assoc⁻¹ Γ₁ Γ₂ Γ₃) (fst , fst₁ , snd) = (fst , fst₁) , snd
+  centralized distrib (_⊎_.inj₁ x , snd) = _⊎_.inj₁ (x , snd)
+  centralized distrib (_⊎_.inj₂ y , snd) = _⊎_.inj₂ (y , snd)
+  centralized distrib⁻¹ (_⊎_.inj₁ (fst , snd)) = _⊎_.inj₁ fst , snd
+  centralized distrib⁻¹ (_⊎_.inj₂ (fst , snd)) = _⊎_.inj₂ fst , snd
+  centralized (x ; x₁) i = centralized x₁ (centralized x i)
+  centralized (x ∥ x₁) (fst , snd) = centralized x fst , centralized x₁ snd
+  centralized (x ◇ x₁) (_⊎_.inj₁ x₂) = _⊎_.inj₁ (centralized x x₂)
+  centralized (x ◇ x₁) (_⊎_.inj₂ y) = _⊎_.inj₂ (centralized x₁ y)
+  centralized (locally l x) i = x i
+  centralized (transmit l₁ l₂) i = i
+  centralized (init l) i = tt
+  centralized (term l) i = tt
+  centralized (fork l a b) i = i
+  centralized (join l a b) i = i
+  centralized (branch l a b) i = i
+  centralized (coalesce l a b) i = i
 ```
