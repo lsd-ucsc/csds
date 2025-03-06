@@ -218,127 +218,12 @@ heap.
     --       recovered from an id-to-receiver table)
     -- TODO: implement broadcast and recvbcast in terms of send and recv
 
-{-
-  fleh : (⟦ τ₁ ⟧ → NetworkProgram) → (⟦ τ₂ ⟧ → NetworkProgram) → (⟦ τ₁ ⊗ τ₂ ⟧ → NetworkProgram)
--}
-
-    --par : (NetworkProgram × NetworkProgram) → NetworkProgram
--- (τ₁ τ₂ : Ty)
--- → ((⟦ τ₁ ⟧ → NetworkProgram) → NetworkProgram)
--- → ((⟦ τ₂ ⟧ → NetworkProgram) → NetworkProgram)
--- → (⟦ τ₂ ⟧ × ⟦ τ₂ ⟧ → NetworkProgram)
-
-
-  _in:_ : Loc → ChoreoHeap → Type
-  self in: ∅        = ⊥
-  self in: (τ ＠ l) = l ≡ self
-  self in: (Γ ∗ Γ') = self in: Γ ⊎ self in: Γ'
-  self in: (Γ + Γ') = self in: Γ ⊎ self in: Γ'
-
-  _in?_ : (l : Loc) → (Γ : ChoreoHeap) → Dec (l in: Γ)
-  self in? ∅ = no λ ■ → ■
-  self in? (τ ＠ l) = l ≟ self
-  self in? (Γ ∗ Γ') = (self in? Γ) ⊎-dec (self in? Γ')
-  self in? (Γ + Γ') = (self in? Γ) ⊎-dec (self in? Γ')
-
-  _ddd:_ : ∀{ℓ} {T₁ T₂ : Type ℓ} → Maybe T₁ → Maybe T₂ → Maybe (These T₁ T₂)
-  some s ddd: some s' = some (these s s')
-  some s ddd: none    = some (this s)
-  none   ddd: some s' = some (that s')
-  none   ddd: none    = none
-
-  Selector : ChoreoHeap → Type
-  Selector ∅ = ⊥
-  Selector (_ ＠ _) = ⊤
-  Selector (Γ ∗ Γ') = These (Selector Γ) (Selector Γ')
-  Selector (Γ + Γ') = These (Selector Γ) (Selector Γ')
-
-  --   Maybe (These (Selector Γ₁) (Selector Γ₁')) × Maybe (These (Selector Γ₂) (Selector Γ₂'))
-  -- → (Maybe (Selector Γ₁) × Maybe (Selector Γ₂)) × (Maybe (Selector Γ₁') × Maybe (Selector Γ₂'))
-  --
-  bbb : {A B : Type} → Maybe (These A B) → (Maybe A × Maybe B)
-  bbb (some (this a)) = some a , none
-  bbb (some (that b)) = none , some b
-  bbb (some (these a b)) = some a , some b
-  bbb none = none , none
-
-{-
-  Foo : (Γ₁ ⇶ Γ₂) → Maybe (Selector Γ₁) → Maybe (Selector Γ₂) → Type
-  Foo (id _) s₁ s₂ = s₁ ≡ s₂
-  Foo (x ∥ x') s₁ s₂ =
-    let (s₁ , s₁') = bbb s₁ in
-    let (s₂ , s₂') = bbb s₂ in
-    Foo x s₁ s₂ × Foo x' s₁' s₂'
-  Foo (x ◇ x') s₁ s₂ =
-    let (s₁ , s₁') = bbb s₁ in
-    Foo x s₁ s₂ × Foo x' s₁' s₂
-  Foo (x₁ ; x₂) s₁ s₂ =
-    ∃[ sₘ ] Foo x₁ s₁ sₘ × Foo x₂ sₘ s₂
-  Foo (locally l x) (some s₁) (some s₂) = s₁ ≡ s₂
-  Foo (locally l x) (some _) none = ⊥
-  Foo (locally l x) none (some _) = ⊥
-  Foo (locally l x) none none = ⊥
-  Foo (transmit l₁ l₂) s₁ s₂ = ⊤
-  Foo (fork l a b) (some s₁) (some s₂) = s₂ ≡ these s₁ s₁
-  Foo (fork l a b) (some _) none = ⊥
-  Foo (fork l a b) none (some _) = ⊥
-  Foo (fork l a b) none none = ⊥
-  Foo (join l a b) (some s₁) (some s₂) = s₁ ≡ these s₂ s₂
-  Foo (join l a b) (some _) none = ⊥
-  Foo (join l a b) none (some _) = ⊥
-  Foo (join l a b) none none = ⊥
-  Foo (branch l a b) (some s₁) (some s₂) = s₂ ≡ these s₁ s₁
-  Foo (branch l a b) (some _) none = ⊥
-  Foo (branch l a b) none (some _) = ⊥
-  Foo (branch l a b) none none = ⊥
-  Foo distrib (some s₁) (some s₂) = {!!}
-  Foo distrib (some _) none = {!!}
-  Foo distrib none (some _) = {!!}
-  Foo distrib none none = {!!}
-  Foo (swap Γ₁ Γ₂) s₁ s₂ = {!!}
-  Foo (assoc Γ₁ Γ₂ Γ₃) s₁ s₂ = {!!}
-  Foo (assoc⁻¹ Γ₁ Γ₂ Γ₃) s₁ s₂ = {!!}
--}
-
-  select : (Γ : ChoreoHeap) → Loc → Maybe (Selector Γ)
-  select ∅        self = none
-  select (_ ＠ l) self = if does (l ≟ self) then some tt else none
-  select (Γ ∗ Γ') self = select Γ self ddd: select Γ' self
-  select (Γ + Γ') self = select Γ self ddd: select Γ' self
-
-{-
-  Epp : (Γ : ChoreoHeap) → Maybe (Selector Γ) → Ty
-  Epp Γ = Maybe.fromMaybe 𝟙 ∘ Maybe.map (go Γ)
-    where
-      go : (Γ : ChoreoHeap) → Selector Γ → Ty
-      go (τ ＠ _)        s     = τ
-      go (Γ ∗ Γ') (this  s)    = go Γ s
-      go (Γ ∗ Γ') (that    s') =          go Γ' s'
-      go (Γ ∗ Γ') (these s s') = go Γ s ⊗ go Γ' s'
-      go (Γ + Γ') (this  s)    = go Γ s ⊕ 𝟙
-      go (Γ + Γ') (that    s') =      𝟙 ⊕ go Γ' s'
-      go (Γ + Γ') (these s s') = go Γ s ⊕ go Γ' s'
--}
-
-{-
-  Epp : (Γ : ChoreoHeap) → Loc → Ty
-  Epp ∅         self = 𝟙
-  Epp (τ ＠ l)  self = if does (l ≟ self) then τ else 𝟙
-  Epp (Γ₁ ∗ Γ₂) self with self in? Γ₁ | self in? Γ₂
-  ... | true  because _ | true  because _ = Epp Γ₁ self ⊗ Epp Γ₂ self
-  ... | true  because _ | false because _ = Epp Γ₁ self
-  ... | false because _ | true because  _ = Epp Γ₂ self
-  ... | false because _ | false because _ = 𝟙
-  Epp (Γ₁ + Γ₂) self = Epp Γ₁ self ⊕ Epp Γ₂ self
--}
-
   Epp : (Γ : ChoreoHeap) → Loc → Ty
   Epp ∅         self = 𝟙
   Epp (τ ＠ l)  self = if does (l ≟ self) then τ else 𝟙
   Epp (Γ₁ ∗ Γ₂) self = Epp Γ₁ self ⊗ Epp Γ₂ self
   Epp (Γ₁ + Γ₂) self = Epp Γ₁ self ⊕ Epp Γ₂ self
 
-  -- ⟦ Epp Γ₁ l ⟧ ⇒ ⟦ Epp Γ₂ l ⟧
   epp : (Γ₁ ⇶ Γ₂) → (l : Loc) → (Epp Γ₁ l ⇒ Epp Γ₂ l)
   epp (id _) self i k =
     k i
@@ -365,7 +250,7 @@ heap.
     -- TODO: find some way to bind over both i₂ and i₂' without sequencing them?
     epp x  self i₁  λ i₂  →
     epp x' self i₁' λ i₂' →
-    let _ = ? in
+    let _ = {!epp x self i₁!} in
     k (i₂ , i₂')
   epp (x ◇ x') self (_⊎_.inj₁ i₁ ) k =
     epp x self i₁ λ i₂ →
