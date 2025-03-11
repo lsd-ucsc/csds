@@ -7,9 +7,9 @@ open import Agda.Primitive
 -->
 
 ```agda
-open import Relation.Binary using (DecidableEquality)
+open import Data.Nat using (ℕ)
 
-module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
+module Choreographies.Bar {location-count : ℕ} where
 ```
 
 <details>
@@ -23,11 +23,14 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   open import Data.Empty
     using (⊥)
   open import Data.Product
-    using (_×_; _,_; ∃-syntax; proj₁; proj₂)
+    using (_×_; _,_; ∃-syntax; Σ-syntax; proj₁; proj₂)
   open import Data.Sum
+    as Sum
     using (_⊎_)
   open import Data.Nat
     using (ℕ)
+  open import Data.Fin
+    using (Fin; _≟_)
   open import Data.Bool
     using (Bool; true; false; if_then_else_)
   open import Data.Maybe
@@ -37,7 +40,7 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   open import Data.These
     using (These; this; that; these)
   open import Data.List
-    using (List; []; _∷_; [_])
+    using (List; []; _∷_; [_]; _++_)
   open import Data.List.Relation.Unary.Any
     using (here; there)
   open import Relation.Nullary.Negation
@@ -46,10 +49,6 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
     using (Dec; does; _because_; yes; no; _⊎-dec_)
   open import Relation.Nullary.Reflects
     using (Reflects)
-  open import Data.List.Membership.DecPropositional _≟_
-    using (_∈_; _∈?_)
-  open import Data.List.Relation.Binary.Subset.DecPropositional _≟_
-    using (_⊆_; _⊆?_)
   open import Relation.Binary.PropositionalEquality
     as Eq
     using (_≡_)
@@ -60,6 +59,7 @@ module Choreographies.Bar {Loc : Type} {_≟_ : DecidableEquality Loc} where
   infixl 22 _∗_
   infixl 21 _+_
   infix  20 _⇶_
+  infixl 20 _∥_
 ```
 </details>
 
@@ -124,6 +124,9 @@ heap.
   _⟶_ : Ty → Ty → Type
   τ₁ ⟶ τ₂ = ⟦ τ₁ ⟧ → ⟦ τ₂ ⟧
 
+
+  Loc : Type
+  Loc = Fin location-count
 
   data ChoreoHeap : Type where
     -- an empty heap
@@ -192,110 +195,6 @@ heap.
     -- TODO: add this operator: (a * b) + (c * d) ⇶ (a + c) * (b + d)
     --       so that `idem` is expressible
 
-  _⇒_ : Ty → Ty → Type
-  data NetworkProgram : Type
-
-  τ₁ ⇒ τ₂ = ⟦ τ₁ ⟧ → (⟦ τ₂ ⟧ → NetworkProgram) → NetworkProgram
-
-  data NetworkProgram where
-    {- F(X) = ( ((τ : Ty) × ⟦ τ ⟧)       -- pure
-              + ((τ : Ty) × ℕ × ⟦ τ ⟧)   -- send
-              + ((τ : Ty) × ℕ × X^⟦ τ ⟧) -- recv
-              )
-    -}
-    -- (τ : Ty, ⟦ τ ⟧) ↝ ⊤
-    pure : (τ : Ty) → ⟦ τ ⟧ → NetworkProgram
-    -- (τ : Ty, ℕ, ⟦ τ ⟧) ↝ ⊤
-    send : (τ : Ty) (id : Loc) (payload : ⟦ τ ⟧) → (⊤ → NetworkProgram) → NetworkProgram
-    -- (τ : Ty, ℕ) ↝ ⟦ τ ⟧
-    recv : (τ : Ty) (id : Loc) → (⟦ τ ⟧ → NetworkProgram) → NetworkProgram
-    --
-    broadcast : Bool → (⊤ → NetworkProgram) → NetworkProgram
-    recvbcast : (Bool → NetworkProgram) → NetworkProgram
-    -- TODO: come up with a `par` combinator that Agda would accept.
-    -- TODO: uniquely identify messages (i.e. add a uniquely-generated ℕ)
-    --       and maybe consider removing the id:Loc parameter (if it can be
-    --       recovered from an id-to-receiver table)
-    -- TODO: implement broadcast and recvbcast in terms of send and recv
-
-  Epp : (Γ : ChoreoHeap) → Loc → Ty
-  Epp ∅         self = 𝟙
-  Epp (τ ＠ l)  self = if does (l ≟ self) then τ else 𝟙
-  Epp (Γ₁ ∗ Γ₂) self = Epp Γ₁ self ⊗ Epp Γ₂ self
-  Epp (Γ₁ + Γ₂) self = Epp Γ₁ self ⊕ Epp Γ₂ self
-
-  epp : (Γ₁ ⇶ Γ₂) → (l : Loc) → (Epp Γ₁ l ⇒ Epp Γ₂ l)
-  epp (id _) self i k =
-    k i
-  epp (swap Γ₁ Γ₂) self (i₁ , i₂) k =
-    k (i₂ , i₁)
-  epp (assoc Γ₁ Γ₂ Γ₃) self ((i₁ , i₂) , i₃) k =
-    k (i₁ , (i₂ , i₃))
-  epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) self (i₁ , (i₂ , i₃)) k =
-    k ((i₁ , i₂) , i₃)
-  epp distrib self (_⊎_.inj₁ x , z) k =
-    k (_⊎_.inj₁ (x , z))
-  epp distrib self (_⊎_.inj₂ y , z) k =
-    k (_⊎_.inj₂ (y , z))
-  epp distrib⁻¹ self (_⊎_.inj₁ (x , z)) k =
-    k (_⊎_.inj₁ x , z)
-  epp distrib⁻¹ self (_⊎_.inj₂ (y , z)) k =
-    k (_⊎_.inj₂ y , z)
-  --
-  epp (x₁ ; x₂) self i k =
-    epp x₁ self i  λ i'  →
-    epp x₂ self i' λ i'' →
-    k i''
-  epp (x  ∥ x') self (i₁ , i₁') k =
-    -- TODO: find some way to bind over both i₂ and i₂' without sequencing them?
-    epp x  self i₁  λ i₂  →
-    epp x' self i₁' λ i₂' →
-    let _ = {!epp x self i₁!} in
-    k (i₂ , i₂')
-  epp (x ◇ x') self (_⊎_.inj₁ i₁ ) k =
-    epp x self i₁ λ i₂ →
-    k (_⊎_.inj₁ i₂)
-  epp (x ◇ x') self (_⊎_.inj₂ i₁') k =
-    epp x' self i₁' λ i₂' →
-    k (_⊎_.inj₂ i₂')
-  epp (locally l f) self i k with l ≟ self
-  ... | yes _ = k (f i)
-  ... | no  _ = k i
-  epp (transmit l₁ l₂) self i k with l₁ ≟ self | l₂ ≟ self
-  ... | no  _ | no  _ = k i
-  ... | no  _ | yes _ = recv _ l₁   k
-  ... | yes _ | no  _ = send _ l₂ i k
-  ... | yes _ | yes _ = k i
-  epp (init l) self i k with l ≟ self
-  ... | no  _ = k i
-  ... | yes _ = k i
-  epp (term l) self with l ≟ self
-  ... | no  _ = λ i k → k i
-  ... | yes _ = λ i k → k i
-  epp (fork l a b) self with l ≟ self
-  ... | no  _ = λ i        k → k (i , i)
-  ... | yes _ = λ (i , i') k → k (i , i')
-  epp (join l a b) self (i , i') k with l ≟ self
-  ... | no  _ = k tt
-  ... | yes _ = k (i , i')
-  epp (branch l a b) self with l ≟ self
-  ... | no  _ = λ i k →
-    recvbcast λ
-      { false → k (_⊎_.inj₁ i)
-      ; true  → k (_⊎_.inj₂ i)
-      }
-  ... | yes _ = λ
-    { (_⊎_.inj₁ x) k →
-        broadcast false λ _ →
-        k (_⊎_.inj₁ x)
-    ; (_⊎_.inj₂ y) k →
-        broadcast true λ _ →
-        k (_⊎_.inj₂ y)
-    }
-  epp (coalesce l a b) self i k with l ≟ self
-  ... | no  _ = k tt
-  ... | yes _ = k i
-
   Centralized : ChoreoHeap → Ty
   Centralized ∅         = 𝟙
   Centralized (τ ＠ l)  = τ
@@ -303,7 +202,6 @@ heap.
   Centralized (Γ₁ + Γ₂) = Centralized Γ₁ ⊕ Centralized Γ₂
 
   centralized : (Γ₁ ⇶ Γ₂) → (⟦ Centralized Γ₁ ⟧ → ⟦ Centralized Γ₂ ⟧)
-  centralized (id _) i = i
   centralized (swap Γ₁ Γ₂) (fst , snd) = snd , fst
   centralized (assoc Γ₁ Γ₂ Γ₃) ((fst , snd₁) , snd) = fst , snd₁ , snd
   centralized (assoc⁻¹ Γ₁ Γ₂ Γ₃) (fst , fst₁ , snd) = (fst , fst₁) , snd
@@ -311,16 +209,179 @@ heap.
   centralized distrib (_⊎_.inj₂ y , snd) = _⊎_.inj₂ (y , snd)
   centralized distrib⁻¹ (_⊎_.inj₁ (fst , snd)) = _⊎_.inj₁ fst , snd
   centralized distrib⁻¹ (_⊎_.inj₂ (fst , snd)) = _⊎_.inj₂ fst , snd
-  centralized (x ; x₁) i = centralized x₁ (centralized x i)
+  centralized (x ; x') = centralized x' ∘ centralized x
   centralized (x ∥ x₁) (fst , snd) = centralized x fst , centralized x₁ snd
   centralized (x ◇ x₁) (_⊎_.inj₁ x₂) = _⊎_.inj₁ (centralized x x₂)
   centralized (x ◇ x₁) (_⊎_.inj₂ y) = _⊎_.inj₂ (centralized x₁ y)
-  centralized (locally l x) i = x i
-  centralized (transmit l₁ l₂) i = i
-  centralized (init l) i = tt
-  centralized (term l) i = tt
-  centralized (fork l a b) i = i
-  centralized (join l a b) i = i
-  centralized (branch l a b) i = i
-  centralized (coalesce l a b) i = i
+  centralized (locally l f) = f
+  --
+  centralized (id _) = λ i → i
+  centralized (transmit l₁ l₂) = λ i → i
+  centralized (init l) = λ i → i
+  centralized (term l) = λ i → i
+  centralized (fork l a b) = λ i → i
+  centralized (join l a b) = λ i → i
+  centralized (branch l a b) = λ i → i
+  centralized (coalesce l a b) = λ i → i
+
+{-
+  - [X] Centralized, functional semantics
+  - [X] Distributed, procedural semantics
+  - [ ] Centralized, procedural semantics
+    -- TODO: this is just a rearrangement of the π-calculus term obtained
+    --       by running all EPP'd terms in parallel, such that every tile
+    --       of the cCSD maps to the all-parallel EPP of that tile.
+-}
+
+  Chan : Type
+  Chan = ℕ
+
+  ChanTree : ChoreoHeap → Type
+  ChanTree ∅ = ⊤
+  ChanTree (τ ＠ _) = Chan
+  ChanTree (Γ₁ ∗ Γ₂) = ChanTree Γ₁ × ChanTree Γ₂
+  ChanTree (Γ₁ + Γ₂) = (Loc → Chan) × (ChanTree Γ₁ × ChanTree Γ₂)
+
+  data Pi : Type where
+    halt  : Pi
+    _∥_   : Pi → Pi → Pi
+    ⟨_!_⟩ : Chan → (Σ[ τ ∈ Ty ] ⟦ τ ⟧) → Pi
+    recv  : Chan → (τ : Ty) → (⟦ τ ⟧ → Pi) → Pi
+
+  syntax recv ch τ (λ x → k) = ⟨ ch ¿ τ , x ⟩ k
+
+  par-all : (Loc → Pi) → Pi
+  par-all f = helper location-count f
+    where
+      helper : (n : ℕ) → (Fin n → Pi) → Pi
+      helper ℕ.zero    _ = halt
+      helper (ℕ.suc n) f = f Fin.zero ∥ helper n (f ∘ Fin.suc)
+
+  π-broadcast : (Loc → Chan) → ⟦ 𝟙 ⊕ 𝟙 ⟧ → Pi
+  π-broadcast o⃗₊ b = par-all (λ l → ⟨ o⃗₊ l ! 𝟙 ⊕ 𝟙 , b ⟩)
+
+  as : Loc → Pi → (Loc → Pi)
+  as l π self = if does (self ≟ l) then π else halt
+
+  _■_ : (Loc → Pi) → (Loc → Pi) → (Loc → Pi)
+  (π₁ ■ π₂) self = π₁ self ∥ π₂ self
+
+  infixl 20 _■_
+
+  π-id : (Γ : ChoreoHeap) → (i⃗ : ChanTree Γ) → (o⃗ : ChanTree Γ) → Loc → Pi
+  π-id ∅ i⃗ o⃗ self = halt
+  π-id (τ ＠ ℓ) i⃗ o⃗ self = if does (self ≟ ℓ) then ⟨ i⃗ ¿ τ , x ⟩ ⟨ o⃗ ! τ , x ⟩ else halt
+  π-id (Γ₁ ∗ Γ₂) (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) self = π-id Γ₁ i⃗₁ o⃗₁ self ∥ π-id Γ₂ i⃗₂ o⃗₂ self
+  π-id (Γ₁ + Γ₂) (i⃗₊ , i⃗₁ , i⃗₂) (o₊ , o⃗₁ , o⃗₂) self =
+    ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
+    Sum.[ (λ _ → π-id Γ₁ i⃗₁ o⃗₁ self) , (λ _ → π-id Γ₂ i⃗₂ o⃗₂ self) ] b
+
+  -- TODO: Constrain all channel names to be distinct.
+  ChanMap : (Γ₁ ⇶ Γ₂) → (ChanTree Γ₁ → ChanTree Γ₂ → Type)
+  ChanMap (id _) i⃗ o⃗ = ⊤
+  ChanMap (swap Γ₁ Γ₂) (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) = ⊤
+  ChanMap (assoc Γ₁ Γ₂ Γ₃) i⃗ o⃗ = ⊤
+  ChanMap (assoc⁻¹ Γ₁ Γ₂ Γ₃) i⃗ o⃗ = ⊤
+  ChanMap distrib i⃗ o⃗ = ⊤
+  ChanMap distrib⁻¹ i⃗ o⃗ = ⊤
+  ChanMap (x₁ ; x₂) i⃗ o⃗ = ∃[ m⃗ ] ChanMap x₁ i⃗ m⃗ × ChanMap x₂ m⃗ o⃗
+  ChanMap (x  ∥ x') (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) = ChanMap x i⃗₁ o⃗₁ × ChanMap x' i⃗₂ o⃗₂
+  ChanMap (x  ◇ x') (i⃗₊ , i⃗₁ , i⃗₂) (o⃗₊ , o⃗₁ , o⃗₂) = ChanMap x i⃗₁ o⃗₁ × ChanMap x' i⃗₂ o⃗₂
+  ChanMap (locally l x) i⃗ o⃗ = ⊤
+  ChanMap (transmit l₁ l₂) i⃗ o⃗ = Chan
+  ChanMap (init l) i⃗ o⃗ = ⊤
+  ChanMap (term l) i⃗ o⃗ = ⊤
+  ChanMap (fork l a b) i⃗ o⃗ = ⊤
+  ChanMap (join l a b) i⃗ o⃗ = ⊤
+  ChanMap (branch l a b) i⃗ o⃗ = ⊤
+  ChanMap (coalesce l a b) i⃗ o⃗ = ⊤
+
+-- TODO: Generate a `ChanMap` of unique channel names for any given cCSD.
+{-
+  chans : (Γ : ChoreoHeap) → ℕ → (ℕ × ChanTree Γ)
+  chans ∅ n = (n , tt)
+  chans (τ ＠ l) n = (ℕ.suc n , n)
+  chans (Γ₁ ∗ Γ₂) n =
+    let (n'  , ch₁) = chans Γ₁ n  in
+    let (n'' , ch₂) = chans Γ₂ n' in
+    (n'' , (ch₁ , ch₂))
+  chans (Γ₁ + Γ₂) n =
+    let (n'  , ch₁) = chans Γ₁ n  in
+    let (n'' , ch₂) = chans Γ₂ n' in
+    (ℕ.suc n'' , (n'' , ch₁ , ch₂))
+-}
+
+  π-epp : {Γ₁ Γ₂ : ChoreoHeap} → (x : Γ₁ ⇶ Γ₂)
+        --^ For any cCSD
+        → (i⃗ : ChanTree Γ₁) → (o⃗ : ChanTree Γ₂) → ChanMap x i⃗ o⃗
+        --^ and an assignment of channel names to every site in the cCSD
+        → Loc → Pi
+        --^ we can produce a family of π-calculus programs, one for each choreographic language.
+  π-epp (id _) i⃗ o⃗ m⃗ = π-id _ i⃗ o⃗
+  π-epp (swap Γ₁ Γ₂) (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) _ =
+    ( π-id _ i⃗₁ o⃗₂
+    ■ π-id _ i⃗₂ o⃗₁ )
+  π-epp (assoc Γ₁ Γ₂ Γ₃) ((i⃗₁ , i⃗₂) , i⃗₃) (o⃗₁ , (o⃗₂ , o⃗₃)) _ =
+    ( π-id _ i⃗₁ o⃗₁
+    ■ π-id _ i⃗₂ o⃗₂
+    ■ π-id _ i⃗₃ o⃗₃ )
+  π-epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) (i⃗₁ , (i⃗₂ , i⃗₃)) ((o⃗₁ , o⃗₂) , o⃗₃) _ =
+    ( π-id _ i⃗₁ o⃗₁
+    ■ π-id _ i⃗₂ o⃗₂
+    ■ π-id _ i⃗₃ o⃗₃ )
+  π-epp distrib ((i⃗₊ , i⃗₁ , i⃗₂) , i⃗₃) (o⃗₊ , (o⃗₁ , o⃗₃) , (o⃗₂ , o⃗₃')) _ self =
+    ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
+    ( ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , b ⟩
+    ∥ Sum.[ (λ _ →   π-id _ i⃗₁ o⃗₁  self
+                   ∥ π-id _ i⃗₃ o⃗₃  self )
+          , (λ _ →   π-id _ i⃗₂ o⃗₂  self
+                   ∥ π-id _ i⃗₃ o⃗₃' self )
+          ] b )
+  π-epp distrib⁻¹ (i⃗₊ , (i⃗₁ , i⃗₃) , (i⃗₂ , i⃗₃')) ((o⃗₊ , o⃗₁ , o⃗₂) , o⃗₃) _ self =
+    ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
+    ( ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , b ⟩
+    ∥ Sum.[ (λ _ →   π-id _ i⃗₁  o⃗₁ self
+                   ∥ π-id _ i⃗₃  o⃗₃ self )
+          , (λ _ →   π-id _ i⃗₂  o⃗₂ self
+                   ∥ π-id _ i⃗₃' o⃗₃ self )
+          ] b )
+  π-epp (x₁ ; x₂) i⃗ o⃗ (m⃗ , m⃗₁ , m⃗₂) = π-epp x₁ i⃗ m⃗ m⃗₁ ■ π-epp x₂ m⃗ o⃗ m⃗₂
+  π-epp (x  ∥ x') (i⃗ , i⃗') (o⃗ , o⃗') (m⃗ , m⃗') = π-epp x i⃗ o⃗ m⃗ ■ π-epp x' i⃗' o⃗' m⃗'
+  π-epp (x  ◇ x') (i⃗₊ , i⃗ , i⃗') (o⃗₊ , o⃗ , o⃗') (m⃗ , m⃗') self =
+    ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
+    ( ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , b ⟩
+    ∥ Sum.[ (λ _ → π-epp x i⃗ o⃗ m⃗ self)
+          , (λ _ → π-epp x' i⃗' o⃗' m⃗' self)
+          ] b )
+  π-epp (locally {τ₁} {τ₂} l f) i o m =
+    as l
+      ( ⟨ i ¿ τ₁ ,   x ⟩
+        ⟨ o ! τ₂ , f x ⟩ )
+  π-epp (transmit {τ} l₁ l₂) i o m =
+    ( as l₁ (⟨ i ¿ τ , x ⟩ ⟨ m ! τ , x ⟩)
+    ■ as l₂ (⟨ m ¿ τ , x ⟩ ⟨ o ! τ , x ⟩) )
+  π-epp (init l) _ o _ =
+    as l ⟨ o ! 𝟙 , tt ⟩
+  π-epp (term l) i _ _ =
+    as l (⟨ i ¿ 𝟙 , _ ⟩ halt)
+  π-epp (fork l τ₁ τ₂) i (o₁ , o₂) _ =
+    as l
+      ( ⟨ i ¿ (τ₁ ⊗ τ₂) , (x₁ , x₂) ⟩
+        ( ⟨ o₁ ! τ₁ , x₁ ⟩
+        ∥ ⟨ o₂ ! τ₂ , x₂ ⟩ ) )
+  π-epp (join l τ₁ τ₂) (i₁ , i₂) o _ =
+    as l (
+      ⟨ i₁ ¿ τ₁ , x ⟩
+      ⟨ i₂ ¿ τ₂ , y ⟩
+      ⟨ o ! (τ₁ ⊗ τ₂) , (x , y) ⟩ )
+  π-epp (branch l τ₁ τ₂) i (o⃗₊ , o₁ , o₂) m⃗ self =
+    as l ( ⟨ i ¿ (τ₁ ⊕ τ₂) , x ⟩
+           Sum.[ (λ a → π-broadcast o⃗₊ (_⊎_.inj₁ tt) ∥ ⟨ o₁ ! τ₁ , a ⟩)
+               , (λ b → π-broadcast o⃗₊ (_⊎_.inj₂ tt) ∥ ⟨ o₂ ! τ₂ , b ⟩ ) ] x)
+       self
+  π-epp (coalesce l τ₁ τ₂) (i₊ , i₁ , i₂) o _ self =
+    as l ( ⟨ i₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
+           Sum.[ (λ _ → ⟨ i₁ ¿ τ₁ , x ⟩ ⟨ o ! (τ₁ ⊕ τ₂) , _⊎_.inj₁ x ⟩)
+               , (λ _ → ⟨ i₂ ¿ τ₂ , x ⟩ ⟨ o ! (τ₁ ⊕ τ₂) , _⊎_.inj₂ x ⟩) ] b )
+       self
 ```
