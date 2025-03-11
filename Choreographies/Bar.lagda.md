@@ -311,6 +311,26 @@ heap.
     (ℕ.suc n'' , (n'' , ch₁ , ch₂))
 -}
 
+  -- The type of input at a projected location.
+  π-Input : (Γ : ChoreoHeap) → Loc → Ty
+  π-Input ∅ self = 𝟙
+  π-Input (τ ＠ l) self = if does (self ≟ l) then τ else 𝟙
+  π-Input (Γ ∗ Γ') self = π-Input Γ self ⊗ π-Input Γ' self
+  π-Input (Γ + Γ') self = π-Input Γ self ⊕ π-Input Γ' self
+
+  -- The encoding of an input at a location as a π-calculus term.
+  π-input : (Γ : ChoreoHeap) → ChanTree Γ → ⟦ Centralized Γ ⟧ → (self : Loc) → Pi
+  π-input ∅ o⃗ v self = halt
+  π-input (τ ＠ l) o v self with self ≟ l
+  ... | yes _ = ⟨ o ! τ , v ⟩
+  ... | no  _ = halt
+  π-input (Γ ∗ Γ') (o⃗ , o⃗') (v , v') self = π-input Γ o⃗ v self ∥ π-input Γ' o⃗' v' self
+  π-input (Γ + Γ') (o⃗₊ , o⃗ , o⃗') (_⊎_.inj₁ x ) self = ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , _⊎_.inj₁ tt ⟩ ∥ π-input Γ  o⃗  x  self
+  π-input (Γ + Γ') (o⃗₊ , o⃗ , o⃗') (_⊎_.inj₂ x') self = ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , _⊎_.inj₁ tt ⟩ ∥ π-input Γ' o⃗' x' self
+
+  -- TODO: Define the type (and encoding) of input for the centralized+procedural semantics,
+  -- and show that it is related to `par-all (π-input Γ o⃗ v)` by a permutation of parallel proceses.
+
   π-epp : {Γ₁ Γ₂ : ChoreoHeap} → (x : Γ₁ ⇶ Γ₂)
         --^ For any cCSD
         → (i⃗ : ChanTree Γ₁) → (o⃗ : ChanTree Γ₂) → ChanMap x i⃗ o⃗
