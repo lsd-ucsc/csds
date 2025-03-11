@@ -251,31 +251,34 @@ heap.
 
   syntax recv ch τ (λ x → k) = ⟨ ch ¿ τ , x ⟩ k
 
-  par-all : (Loc → Pi) → Pi
-  par-all f = helper location-count f
-    where
-      helper : (n : ℕ) → (Fin n → Pi) → Pi
-      helper ℕ.zero    _ = halt
-      helper (ℕ.suc n) f = f Fin.zero ∥ helper n (f ∘ Fin.suc)
+  data _≅_ : (_ _ : Pi) → Type where
+    π-refl   : (π : Pi) → π ≅ π
+    π-trans  : {π₁ π₂ π₃ : Pi} → (π₁ ≅ π₂) → (π₂ ≅ π₃) → (π₁ ≅ π₃)
+    π-cong   : {π₁ π₂ π₁' π₂' : Pi} → (π₁ ≅ π₂) → (π₁' ≅ π₂') → (π₁ ∥ π₁') ≅ (π₂ ∥ π₂')
 
-  π-broadcast : (Loc → Chan) → ⟦ 𝟙 ⊕ 𝟙 ⟧ → Pi
-  π-broadcast o⃗₊ b = par-all (λ l → ⟨ o⃗₊ l ! 𝟙 ⊕ 𝟙 , b ⟩)
+    π-assoc  : (π₁ π₂ π₃ : Pi) → ((π₁ ∥ π₂) ∥ π₃) ≅ (π₁ ∥ (π₂ ∥ π₃))
+    π-comm   : (π₁ π₂ : Pi) → (π₁ ∥ π₂) ≅ (π₂ ∥ π₁)
+    π-unit   : (π : Pi) → (π ∥ halt) ≅ π
+    π-unit⁻¹ : (π : Pi) → π ≅ (π ∥ halt)
 
-  as : Loc → Pi → (Loc → Pi)
-  as l π self = if does (self ≟ l) then π else halt
+  π-assoc⁻¹ : (π₁ π₂ π₃ : Pi) → (π₁ ∥ (π₂ ∥ π₃)) ≅ ((π₁ ∥ π₂) ∥ π₃)
+  π-assoc⁻¹ _ _ _ =
+    π-trans (π-trans (π-trans (π-trans
+      (π-comm _ _)
+      (π-cong (π-comm _ _) (π-refl _)) )
+      (π-assoc _ _ _) )
+      (π-cong (π-refl _) (π-comm _ _)) )
+      (π-comm _ _)
 
-  _■_ : (Loc → Pi) → (Loc → Pi) → (Loc → Pi)
-  (π₁ ■ π₂) self = π₁ self ∥ π₂ self
+  π-sym : {π₁ π₂ : Pi} → (π₁ ≅ π₂) → (π₂ ≅ π₁)
+  π-sym (π-refl π) = π-refl π
+  π-sym (π-trans σ₁ σ₂) = π-trans (π-sym σ₂) (π-sym σ₁)
+  π-sym (π-cong σ₁ σ₂) = π-cong (π-sym σ₁) (π-sym σ₂)
+  π-sym (π-assoc π₁ π₂ π₃) = π-assoc⁻¹ π₁ π₂ π₃
+  π-sym (π-comm π₁ π₂) = π-comm π₂ π₁
+  π-sym (π-unit π) = π-unit⁻¹ π
+  π-sym (π-unit⁻¹ π) = π-unit π
 
-  infixl 20 _■_
-
-  π-id : (Γ : ChoreoHeap) → (i⃗ : ChanTree Γ) → (o⃗ : ChanTree Γ) → Loc → Pi
-  π-id ∅ i⃗ o⃗ self = halt
-  π-id (τ ＠ ℓ) i⃗ o⃗ self = if does (self ≟ ℓ) then ⟨ i⃗ ¿ τ , x ⟩ ⟨ o⃗ ! τ , x ⟩ else halt
-  π-id (Γ₁ ∗ Γ₂) (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) self = π-id Γ₁ i⃗₁ o⃗₁ self ∥ π-id Γ₂ i⃗₂ o⃗₂ self
-  π-id (Γ₁ + Γ₂) (i⃗₊ , i⃗₁ , i⃗₂) (o₊ , o⃗₁ , o⃗₂) self =
-    ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
-    Sum.[ (λ _ → π-id Γ₁ i⃗₁ o⃗₁ self) , (λ _ → π-id Γ₂ i⃗₂ o⃗₂ self) ] b
 
   -- TODO: Constrain all channel names to be distinct.
   ChanMap : (Γ₁ ⇶ Γ₂) → (ChanTree Γ₁ → ChanTree Γ₂ → Type)
@@ -383,6 +386,32 @@ heap.
     let (n , m₁) = chans Γ₁ 0 in
     let (_ , m₂ , m) = chanmap x n m₁ in
     (m₁ , m₂ , m)
+
+  par-all : (Loc → Pi) → Pi
+  par-all f = helper location-count f
+    where
+      helper : (n : ℕ) → (Fin n → Pi) → Pi
+      helper ℕ.zero    _ = halt
+      helper (ℕ.suc n) f = f Fin.zero ∥ helper n (f ∘ Fin.suc)
+
+  π-broadcast : (Loc → Chan) → ⟦ 𝟙 ⊕ 𝟙 ⟧ → Pi
+  π-broadcast o⃗₊ b = par-all (λ l → ⟨ o⃗₊ l ! 𝟙 ⊕ 𝟙 , b ⟩)
+
+  as : Loc → Pi → (Loc → Pi)
+  as l π self = if does (self ≟ l) then π else halt
+
+  _■_ : (Loc → Pi) → (Loc → Pi) → (Loc → Pi)
+  (π₁ ■ π₂) self = π₁ self ∥ π₂ self
+
+  infixl 20 _■_
+
+  π-id : (Γ : ChoreoHeap) → (i⃗ : ChanTree Γ) → (o⃗ : ChanTree Γ) → Loc → Pi
+  π-id ∅ i⃗ o⃗ self = halt
+  π-id (τ ＠ l) i⃗ o⃗ = as l (⟨ i⃗ ¿ τ , x ⟩ ⟨ o⃗ ! τ , x ⟩)
+  π-id (Γ₁ ∗ Γ₂) (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) self = π-id Γ₁ i⃗₁ o⃗₁ self ∥ π-id Γ₂ i⃗₂ o⃗₂ self
+  π-id (Γ₁ + Γ₂) (i⃗₊ , i⃗₁ , i⃗₂) (o₊ , o⃗₁ , o⃗₂) self =
+    ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
+    Sum.[ (λ _ → π-id Γ₁ i⃗₁ o⃗₁ self) , (λ _ → π-id Γ₂ i⃗₂ o⃗₂ self) ] b
 
   -- The type of input at a projected location.
   π-Input : (Γ : ChoreoHeap) → Loc → Ty
