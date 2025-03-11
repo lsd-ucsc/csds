@@ -23,6 +23,7 @@ module Choreographies.Bar {location-count : ℕ} where
   open import Data.Empty
     using (⊥)
   open import Data.Product
+    as Prod
     using (_×_; _,_; ∃-syntax; Σ-syntax; proj₁; proj₂)
   open import Data.Sum
     as Sum
@@ -296,8 +297,12 @@ heap.
   ChanMap (branch l a b) i⃗ o⃗ = ⊤
   ChanMap (coalesce l a b) i⃗ o⃗ = ⊤
 
--- TODO: Generate a `ChanMap` of unique channel names for any given cCSD.
-{-
+  foo : (len : ℕ) → (next : ℕ) → (ℕ × (Fin len → ℕ))
+  foo ℕ.zero      next = next , λ()
+  foo (ℕ.suc len) next =
+    let (next' , f) = foo len next in
+    (ℕ.suc next' , (λ{ Fin.zero → next' ; (Fin.suc l) → f l }))
+
   chans : (Γ : ChoreoHeap) → ℕ → (ℕ × ChanTree Γ)
   chans ∅ n = (n , tt)
   chans (τ ＠ l) n = (ℕ.suc n , n)
@@ -308,8 +313,76 @@ heap.
   chans (Γ₁ + Γ₂) n =
     let (n'  , ch₁) = chans Γ₁ n  in
     let (n'' , ch₂) = chans Γ₂ n' in
-    (ℕ.suc n'' , (n'' , ch₁ , ch₂))
--}
+    let (n''' , ch₊) = foo location-count n'' in
+    (ℕ.suc n''' , (ch₊ , ch₁ , ch₂))
+
+  -- TODO: Consider assigning all sites along the same logical event the same channel.
+  -- This would cut down on the number of forwarding processes that need to be emitted.
+  chanmap : (x : Γ₁ ⇶ Γ₂) → ℕ → (m₁ : ChanTree Γ₁) → (ℕ × ∃[ m₂ ] ChanMap x m₁ m₂)
+  chanmap (id Γ) next _ =
+    let (next' , m₂) = chans Γ next in
+    (next' , m₂ , tt)
+  chanmap (swap Γ₁ Γ₂) next _ =
+    let (next' , m₂) = chans (Γ₂ ∗ Γ₁) next in
+    (next' , m₂ , tt)
+  chanmap (assoc Γ₁ Γ₂ Γ₃) next _ =
+    let (next' , m₂) = chans (Γ₁ ∗ (Γ₂ ∗ Γ₃)) next in
+    (next' , m₂ , tt)
+  chanmap (assoc⁻¹ Γ₁ Γ₂ Γ₃) next _ =
+    let (next' , m₂) = chans ((Γ₁ ∗ Γ₂) ∗ Γ₃) next in
+    (next' , m₂ , tt)
+  chanmap (distrib {Γ₁} {Γ₂} {Γ₃}) next _ =
+    let (next' , m₂) = chans ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) next in
+    (next' , m₂ , tt)
+  chanmap (distrib⁻¹ {Γ₁} {Γ₃} {Γ₂}) next m₁ =
+    let (next' , m₂) = chans ((Γ₁ + Γ₂) ∗ Γ₃) next in
+    (next' , m₂ , tt)
+  chanmap (x₁ ; x₂) next m₁ =
+    let (next' , m₂ , m') = chanmap x₁ next m₁ in
+    let (next'' , m) = chans _ next' in
+    let (next''' , m₃ , m'') = chanmap x₂ next'' m₂ in
+    (next''' , m₃ , (m , m' , m''))
+  chanmap (x ∥ x') next (m₁ , m₁') =
+    let (next' , m₂ , m) = chanmap x next m₁ in
+    let (next'' , m₂' , m') = chanmap x' next' m₁' in
+    (next'' , (m₂ , m₂') , (m , m'))
+  chanmap (x ◇ x') next (i₊ , i₁ , i₂) =
+    let (next' , o₁ , m) = chanmap x next i₁ in
+    let (next'' , o₂ , m') = chanmap x' next' i₂ in
+    let (next''' , o₊) = foo location-count next'' in
+    (next''' , (o₊ , o₁ , o₂) , (m , m'))
+  chanmap (locally {τ₁} {τ₂} l f) next _ =
+    let (next' , o) = chans (τ₂ ＠ l) next in
+    (next' , o , tt)
+  chanmap (transmit {τ} l₁ l₂) next _ =
+    let m = next in
+    let next' = ℕ.suc next in
+    let (next'' , o) = chans (τ ＠ l₂) next' in
+    (next'' , o , m)
+  chanmap (init l) next _ =
+    let o = next in
+    let next' = ℕ.suc next in
+    (next' , o , tt)
+  chanmap (term l) next _ =
+    (next , tt , tt)
+  chanmap (fork l τ₁ τ₂) next _ =
+    let (next' , o) = chans ((τ₁ ＠ l) ∗ (τ₂ ＠ l)) next in
+    (next' , o , tt)
+  chanmap (join l τ₁ τ₂) next _ =
+    let (next' , o) = chans ((τ₁ ⊗ τ₂) ＠ l) next in
+    (next' , o , tt)
+  chanmap (branch l τ₁ τ₂) next i =
+    let (next' , o) = chans ((τ₁ ＠ l) + (τ₂ ＠ l)) next in
+    (next' , o , tt)
+  chanmap (coalesce l τ₁ τ₂) next i =
+    let (next' , o) = chans ((τ₁ ⊕ τ₂) ＠ l) next in
+    (next' , o , tt)
+
+  chanmap' : (x : Γ₁ ⇶ Γ₂) → ∃[ m₁ ] ∃[ m₂ ] ChanMap x m₁ m₂
+  chanmap' {Γ₁ = Γ₁} {Γ₂ = Γ₂} x =
+    let (n , m₁) = chans Γ₁ 0 in
+    let (_ , m₂ , m) = chanmap x n m₁ in
+    (m₁ , m₂ , m)
 
   -- The type of input at a projected location.
   π-Input : (Γ : ChoreoHeap) → Loc → Ty
