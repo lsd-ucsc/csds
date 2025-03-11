@@ -506,4 +506,52 @@ heap.
            Sum.[ (λ _ → ⟨ i₁ ¿ τ₁ , x ⟩ ⟨ o ! (τ₁ ⊕ τ₂) , _⊎_.inj₁ x ⟩)
                , (λ _ → ⟨ i₂ ¿ τ₂ , x ⟩ ⟨ o ! (τ₁ ⊕ τ₂) , _⊎_.inj₂ x ⟩) ] b )
        self
+
+  π-centralized : {Γ₁ Γ₂ : ChoreoHeap} → (x : Γ₁ ⇶ Γ₂)
+                --^ For any cCSD
+                → (i⃗ : ChanTree Γ₁) → (o⃗ : ChanTree Γ₂) → ChanMap x i⃗ o⃗
+                --^ and an assignment of channel names to every site in the cCSD
+                → Pi
+                --^ we can produce a π-calculus program
+  π-centralized (id Γ) i⃗ o⃗ m = par-all (π-epp (id Γ) i⃗ o⃗ m)
+  π-centralized (swap Γ₁ Γ₂) i⃗ o⃗ m = par-all (π-epp (swap Γ₁ Γ₂) i⃗ o⃗ m)
+  π-centralized (assoc Γ₁ Γ₂ Γ₃) i⃗ o⃗ _ = {!!}
+  π-centralized (assoc⁻¹ Γ₁ Γ₂ Γ₃) i⃗ o⃗ _ = {!!}
+  π-centralized distrib i⃗ o⃗ _ = {!!}
+  π-centralized distrib⁻¹ i⃗ o⃗ _ = {!!}
+  π-centralized (x ; x₁) i⃗ o⃗ _ = {!!}
+  π-centralized (x ∥ x₁) i⃗ o⃗ _ = {!!}
+  π-centralized (x ◇ x₁) i⃗ o⃗ _ = {!!}
+  π-centralized (locally l x) i⃗ o⃗ _ = {!!}
+  π-centralized (transmit l₁ l₂) i⃗ o⃗ _ = {!!}
+  π-centralized (init l) i⃗ o⃗ _ = {!!}
+  π-centralized (term l) i⃗ o⃗ _ = {!!}
+  π-centralized (fork l a b) i⃗ o⃗ _ = {!!}
+  π-centralized (join l a b) i⃗ o⃗ _ = {!!}
+  π-centralized (branch l a b) i⃗ o⃗ _ = {!!}
+  π-centralized (coalesce l a b) i⃗ o⃗ _ = {!!}
+
+  π-centralized≅epp : {Γ₁ Γ₂ : ChoreoHeap} → (x : Γ₁ ⇶ Γ₂)
+                    --^ For any cCSD
+                    → (i⃗ : ChanTree Γ₁) → (o⃗ : ChanTree Γ₂) → (m : ChanMap x i⃗ o⃗)
+                    --^ and an assignment of channel names to every site in the cCSD
+                    → (π-centralized x i⃗ o⃗ m ≅ par-all (π-epp x i⃗ o⃗ m))
+                    --^ we can produce a π-calculus program
+  π-centralized≅epp (id _) i⃗ o⃗ m = π-refl _
+  π-centralized≅epp (swap Γ₁ Γ₂) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (assoc Γ₁ Γ₂ Γ₃) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) i⃗ o⃗ m = {!!}
+  π-centralized≅epp distrib i⃗ o⃗ m = {!!}
+  π-centralized≅epp distrib⁻¹ i⃗ o⃗ m = {!!}
+  π-centralized≅epp (x ; x₁) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (x ∥ x₁) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (x ◇ x₁) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (locally l x) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (transmit l₁ l₂) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (init l) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (term l) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (fork l a b) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (join l a b) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (branch l a b) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (coalesce l a b) i⃗ o⃗ m = {!!}
 ```
