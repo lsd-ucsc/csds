@@ -77,7 +77,7 @@ module Execution.Causality where
   Arr[ x₁ ⟫ x₂ ] (inj₂ e₁) (inj₁ e₂) = ⊥
   Arr[ x₁ ⟫ x₂ ] (inj₁ e₁) (inj₂ e₂) =
     ∃[ sₘ ] ( Arr[ x₁ ] e₁ LeadingEvent[ x₁ , sₘ ]
-            × Arr[ x₂ ] TrailingEvent[ x₂ , sₘ ] e₂)
+            × Arr[ x₂ ] TrailingEvent[ x₂ , sₘ ] e₂ )
   -- Paths through atomic diagrams
   Arr[ tick ] (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
   Arr[ tick ] (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
@@ -117,4 +117,56 @@ module Execution.Causality where
 
   end[_] : {exec : Γ₁ ⇶ Γ₂} {t₁ t₂ : Event exec} → (t₁ ↝ t₂) → Event exec
   end[_] {t₂ = t₂} _ = t₂
+
+
+  -- An equivalence relation on events.
+  same-as : (exec : Γ₁ ⇶ Γ₂) (e₁ e₂ : Event exec) → Type
+  --
+  same-as (x  ∥ x') (inj₁ e₁) (inj₁ e₂) = same-as x e₁ e₂
+  same-as (x  ∥ x') (inj₂ e₁) (inj₂ e₂) = same-as x' e₁ e₂
+  same-as (x  ∥ x') (inj₂ e₁) (inj₁ e₂) = ⊥
+  same-as (x  ∥ x') (inj₁ e₁) (inj₂ e₂) = ⊥
+  --
+  same-as (x₁ ⟫ x₂) (inj₁ e₁) (inj₁ e₂) = same-as x₁ e₁ e₂
+  same-as (x₁ ⟫ x₂) (inj₂ e₁) (inj₂ e₂) = same-as x₂ e₁ e₂
+  same-as (x₁ ⟫ x₂) (inj₂ e₂) (inj₁ e₁) =
+    ∃[ sₘ ] ( same-as x₁ e₁ LeadingEvent[ x₁ , sₘ ]
+            × same-as x₂ TrailingEvent[ x₂ , sₘ ] e₂ )
+  same-as (x₁ ⟫ x₂) (inj₁ e₁) (inj₂ e₂) =
+    ∃[ sₘ ] ( same-as x₁ e₁ LeadingEvent[ x₁ , sₘ ]
+            × same-as x₂ TrailingEvent[ x₂ , sₘ ] e₂ )
+  --
+  same-as tick (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
+  same-as tick (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
+  same-as tick (inj₂ _) (inj₁ _) = ⊥
+  same-as tick (inj₁ _) (inj₂ _) = ⊥
+  --
+  same-as fork (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
+  same-as fork (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
+  same-as fork (inj₂ s₁) (inj₁ s₂) = ⊥
+  same-as fork (inj₁ s₁) (inj₂ s₂) = ⊥
+  --
+  same-as join (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
+  same-as join (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
+  same-as join (inj₂ s₁) (inj₁ s₂) = ⊥
+  same-as join (inj₁ s₁) (inj₂ s₂) = ⊥
+  --
+  same-as init (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
+  same-as init (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
+  same-as init (inj₂ s₁) (inj₁ s₂) = ⊥
+  same-as init (inj₁ s₁) (inj₂ s₂) = ⊥
+  --
+  same-as term (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
+  same-as term (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
+  same-as term (inj₂ s₁) (inj₁ s₂) = ⊥
+  same-as term (inj₁ s₁) (inj₂ s₂) = ⊥
+  --
+  same-as (perm σ) (inj₁ s₁) (inj₁ s₂) = s₁ ≡ s₂
+  same-as (perm σ) (inj₂ s₁) (inj₂ s₂) = s₁ ≡ s₂
+  same-as (perm σ) (inj₂ s₂) (inj₁ s₁) = Tree.forward σ s₁ ≡ s₂
+  same-as (perm σ) (inj₁ s₁) (inj₂ s₂) = Tree.forward σ s₁ ≡ s₂
+
+  _~_ : {exec : Γ₁ ⇶ Γ₂} (e₁ e₂ : Event exec) → Type
+  e₁ ~ e₂ = same-as _ e₁ e₂
+  -- TODO: Give a decision procedure for _~_.
 ```
