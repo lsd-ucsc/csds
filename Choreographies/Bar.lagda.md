@@ -155,8 +155,8 @@ heap.
   --unitₗ⁻¹ : ∀ Γ        → (∅ ∗ Γ) ⇶      Γ
 
     -- products can distribute over sums
-    distrib   : ((Γ₁ + Γ₂) ∗ Γ₃) ⇶ ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃))
-    distrib⁻¹ : ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) ⇶ ((Γ₁ + Γ₂) ∗ Γ₃)
+    distrib   : ∀ Γ₁ Γ₂ Γ₃ → ((Γ₁ + Γ₂) ∗ Γ₃) ⇶ ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃))
+    distrib⁻¹ : ∀ Γ₁ Γ₂ Γ₃ → ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) ⇶ ((Γ₁ + Γ₂) ∗ Γ₃)
 
     -- sequential composition
     _;_ : (x₁ : Γ₁ ⇶ Γ₂)
@@ -206,10 +206,10 @@ heap.
   centralized (swap Γ₁ Γ₂) (fst , snd) = snd , fst
   centralized (assoc Γ₁ Γ₂ Γ₃) ((fst , snd₁) , snd) = fst , snd₁ , snd
   centralized (assoc⁻¹ Γ₁ Γ₂ Γ₃) (fst , fst₁ , snd) = (fst , fst₁) , snd
-  centralized distrib (_⊎_.inj₁ x , snd) = _⊎_.inj₁ (x , snd)
-  centralized distrib (_⊎_.inj₂ y , snd) = _⊎_.inj₂ (y , snd)
-  centralized distrib⁻¹ (_⊎_.inj₁ (fst , snd)) = _⊎_.inj₁ fst , snd
-  centralized distrib⁻¹ (_⊎_.inj₂ (fst , snd)) = _⊎_.inj₂ fst , snd
+  centralized (distrib _ _ _) (_⊎_.inj₁ x , snd) = _⊎_.inj₁ (x , snd)
+  centralized (distrib _ _ _) (_⊎_.inj₂ y , snd) = _⊎_.inj₂ (y , snd)
+  centralized (distrib⁻¹ _ _ _) (_⊎_.inj₁ (fst , snd)) = _⊎_.inj₁ fst , snd
+  centralized (distrib⁻¹ _ _ _) (_⊎_.inj₂ (fst , snd)) = _⊎_.inj₂ fst , snd
   centralized (x ; x') = centralized x' ∘ centralized x
   centralized (x ∥ x₁) (fst , snd) = centralized x fst , centralized x₁ snd
   centralized (x ◇ x₁) (_⊎_.inj₁ x₂) = _⊎_.inj₁ (centralized x x₂)
@@ -286,13 +286,13 @@ heap.
   ChanMap (swap Γ₁ Γ₂) (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) = ⊤
   ChanMap (assoc Γ₁ Γ₂ Γ₃) i⃗ o⃗ = ⊤
   ChanMap (assoc⁻¹ Γ₁ Γ₂ Γ₃) i⃗ o⃗ = ⊤
-  ChanMap distrib i⃗ o⃗ = ⊤
-  ChanMap distrib⁻¹ i⃗ o⃗ = ⊤
+  ChanMap (distrib _ _ _) i⃗ o⃗ = ⊤
+  ChanMap (distrib⁻¹ _ _ _) i⃗ o⃗ = ⊤
   ChanMap (x₁ ; x₂) i⃗ o⃗ = ∃[ m⃗ ] ChanMap x₁ i⃗ m⃗ × ChanMap x₂ m⃗ o⃗
   ChanMap (x  ∥ x') (i⃗₁ , i⃗₂) (o⃗₁ , o⃗₂) = ChanMap x i⃗₁ o⃗₁ × ChanMap x' i⃗₂ o⃗₂
   ChanMap (x  ◇ x') (i⃗₊ , i⃗₁ , i⃗₂) (o⃗₊ , o⃗₁ , o⃗₂) = ChanMap x i⃗₁ o⃗₁ × ChanMap x' i⃗₂ o⃗₂
   ChanMap (locally l x) i⃗ o⃗ = ⊤
-  ChanMap (transmit l₁ l₂) i⃗ o⃗ = Chan
+  ChanMap (transmit l₁ l₂) i⃗ o⃗ = ⊤
   ChanMap (init l) i⃗ o⃗ = ⊤
   ChanMap (term l) i⃗ o⃗ = ⊤
   ChanMap (fork l a b) i⃗ o⃗ = ⊤
@@ -334,10 +334,10 @@ heap.
   chanmap (assoc⁻¹ Γ₁ Γ₂ Γ₃) next _ =
     let (next' , m₂) = chans ((Γ₁ ∗ Γ₂) ∗ Γ₃) next in
     (next' , m₂ , tt)
-  chanmap (distrib {Γ₁} {Γ₂} {Γ₃}) next _ =
+  chanmap (distrib Γ₁ Γ₂ Γ₃) next _ =
     let (next' , m₂) = chans ((Γ₁ ∗ Γ₃) + (Γ₂ ∗ Γ₃)) next in
     (next' , m₂ , tt)
-  chanmap (distrib⁻¹ {Γ₁} {Γ₃} {Γ₂}) next m₁ =
+  chanmap (distrib⁻¹ Γ₁ Γ₂ Γ₃) next m₁ =
     let (next' , m₂) = chans ((Γ₁ + Γ₂) ∗ Γ₃) next in
     (next' , m₂ , tt)
   chanmap (x₁ ; x₂) next m₁ =
@@ -451,7 +451,7 @@ heap.
     ( π-id _ i⃗₁ o⃗₁
     ■ π-id _ i⃗₂ o⃗₂
     ■ π-id _ i⃗₃ o⃗₃ )
-  π-epp distrib ((i⃗₊ , i⃗₁ , i⃗₂) , i⃗₃) (o⃗₊ , (o⃗₁ , o⃗₃) , (o⃗₂ , o⃗₃')) _ self =
+  π-epp (distrib _ _ _) ((i⃗₊ , i⃗₁ , i⃗₂) , i⃗₃) (o⃗₊ , (o⃗₁ , o⃗₃) , (o⃗₂ , o⃗₃')) _ self =
     ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
     ( ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , b ⟩
     ∥ Sum.[ (λ _ →   π-id _ i⃗₁ o⃗₁  self
@@ -459,7 +459,7 @@ heap.
           , (λ _ →   π-id _ i⃗₂ o⃗₂  self
                    ∥ π-id _ i⃗₃ o⃗₃' self )
           ] b )
-  π-epp distrib⁻¹ (i⃗₊ , (i⃗₁ , i⃗₃) , (i⃗₂ , i⃗₃')) ((o⃗₊ , o⃗₁ , o⃗₂) , o⃗₃) _ self =
+  π-epp (distrib⁻¹ _ _ _) (i⃗₊ , (i⃗₁ , i⃗₃) , (i⃗₂ , i⃗₃')) ((o⃗₊ , o⃗₁ , o⃗₂) , o⃗₃) _ self =
     ⟨ i⃗₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
     ( ⟨ o⃗₊ self ! 𝟙 ⊕ 𝟙 , b ⟩
     ∥ Sum.[ (λ _ →   π-id _ i⃗₁  o⃗₁ self
@@ -517,8 +517,8 @@ heap.
   π-centralized (swap Γ₁ Γ₂) i⃗ o⃗ m = par-all (π-epp (swap Γ₁ Γ₂) i⃗ o⃗ m)
   π-centralized (assoc Γ₁ Γ₂ Γ₃) i⃗ o⃗ _ = {!!}
   π-centralized (assoc⁻¹ Γ₁ Γ₂ Γ₃) i⃗ o⃗ _ = {!!}
-  π-centralized distrib i⃗ o⃗ _ = {!!}
-  π-centralized distrib⁻¹ i⃗ o⃗ _ = {!!}
+  π-centralized (distrib _ _ _) i⃗ o⃗ _ = {!!}
+  π-centralized (distrib⁻¹ _ _ _) i⃗ o⃗ _ = {!!}
   π-centralized (x ; x₁) i⃗ o⃗ _ = {!!}
   π-centralized (x ∥ x₁) i⃗ o⃗ _ = {!!}
   π-centralized (x ◇ x₁) i⃗ o⃗ _ = {!!}
@@ -541,8 +541,8 @@ heap.
   π-centralized≅epp (swap Γ₁ Γ₂) i⃗ o⃗ m = {!!}
   π-centralized≅epp (assoc Γ₁ Γ₂ Γ₃) i⃗ o⃗ m = {!!}
   π-centralized≅epp (assoc⁻¹ Γ₁ Γ₂ Γ₃) i⃗ o⃗ m = {!!}
-  π-centralized≅epp distrib i⃗ o⃗ m = {!!}
-  π-centralized≅epp distrib⁻¹ i⃗ o⃗ m = {!!}
+  π-centralized≅epp (distrib _ _ _) i⃗ o⃗ m = {!!}
+  π-centralized≅epp (distrib⁻¹ _ _ _) i⃗ o⃗ m = {!!}
   π-centralized≅epp (x ; x₁) i⃗ o⃗ m = {!!}
   π-centralized≅epp (x ∥ x₁) i⃗ o⃗ m = {!!}
   π-centralized≅epp (x ◇ x₁) i⃗ o⃗ m = {!!}
