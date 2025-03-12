@@ -243,6 +243,13 @@ heap.
   ChanTree (Γ₁ ∗ Γ₂) = ChanTree Γ₁ × ChanTree Γ₂
   ChanTree (Γ₁ + Γ₂) = (Loc → Chan) × (ChanTree Γ₁ × ChanTree Γ₂)
 
+  -- Consider adding a nondeterministic choice operator _+_
+  -- following https://era.ed.ac.uk/bitstream/handle/1842/6050/ECS-LFCS-91-180.pdf?sequence=2
+  -- ("The Polyadic π-Calculus: A Tutorial")
+  -- so that choreographic choice is modeled by receiving on one of two channels,
+  -- the one activated eliminating the one left behind.
+  -- This would avoid any squicky feelings about using `Sum.[_,_]` (or equivalent)
+  -- in our semantics.
   data Pi : Type where
     halt  : Pi
     _∥_   : Pi → Pi → Pi
@@ -278,6 +285,14 @@ heap.
   π-sym (π-comm π₁ π₂) = π-comm π₂ π₁
   π-sym (π-unit π) = π-unit⁻¹ π
   π-sym (π-unit⁻¹ π) = π-unit π
+
+  -- Big-step semantics
+  data _⇓_ : (_ _ : Pi) → Type where
+    -- TODO!
+
+  -- Small-step semantics (instead?)
+  data _⇒_ : (_ _ : Pi) → Type where
+    -- TODO!
 
 
   -- TODO: Constrain all channel names to be distinct.
