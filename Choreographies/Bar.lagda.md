@@ -373,10 +373,8 @@ heap.
     let (next' , o) = chans (τ₂ ＠ l) next in
     (next' , o , tt)
   chanmap (transmit {τ} l₁ l₂) next _ =
-    let m = next in
-    let next' = ℕ.suc next in
-    let (next'' , o) = chans (τ ＠ l₂) next' in
-    (next'' , o , m)
+    let (next' , o) = chans (τ ＠ l₂) next in
+    (next' , o , tt)
   chanmap (init l) next _ =
     let o = next in
     let next' = ℕ.suc next in
@@ -495,8 +493,7 @@ heap.
       ( ⟨ i ¿ τ₁ ,   x ⟩
         ⟨ o ! τ₂ , f x ⟩ )
   π-epp (transmit {τ} l₁ l₂) i o m =
-    ( as l₁ (⟨ i ¿ τ , x ⟩ ⟨ m ! τ , x ⟩)
-    ■ as l₂ (⟨ m ¿ τ , x ⟩ ⟨ o ! τ , x ⟩) )
+    as l₁ (⟨ i ¿ τ , x ⟩ ⟨ o ! τ , x ⟩)
   π-epp (init l) _ o _ =
     as l ⟨ o ! 𝟙 , tt ⟩
   π-epp (term l) i _ _ =
@@ -511,11 +508,10 @@ heap.
       ⟨ i₁ ¿ τ₁ , x ⟩
       ⟨ i₂ ¿ τ₂ , y ⟩
       ⟨ o ! (τ₁ ⊗ τ₂) , (x , y) ⟩ )
-  π-epp (branch l τ₁ τ₂) i (o⃗₊ , o₁ , o₂) m⃗ self =
+  π-epp (branch l τ₁ τ₂) i (o⃗₊ , o₁ , o₂) _ =
     as l ( ⟨ i ¿ (τ₁ ⊕ τ₂) , x ⟩
            Sum.[ (λ a → π-broadcast o⃗₊ (_⊎_.inj₁ tt) ∥ ⟨ o₁ ! τ₁ , a ⟩)
                , (λ b → π-broadcast o⃗₊ (_⊎_.inj₂ tt) ∥ ⟨ o₂ ! τ₂ , b ⟩ ) ] x)
-       self
   π-epp (coalesce l τ₁ τ₂) (i₊ , i₁ , i₂) o _ self =
     as l ( ⟨ i₊ self ¿ 𝟙 ⊕ 𝟙 , b ⟩
            Sum.[ (λ _ → ⟨ i₁ ¿ τ₁ , x ⟩ ⟨ o ! (τ₁ ⊕ τ₂) , _⊎_.inj₁ x ⟩)
