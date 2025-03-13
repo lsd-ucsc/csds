@@ -196,6 +196,110 @@ heap.
     -- TODO: add this operator: (a * b) + (c * d) ⇶ (a + c) * (b + d)
     --       so that `idem` is expressible
 
+  Site : (Γ : ChoreoHeap) → Type
+  Site ∅ = ⊥
+  Site (x ＠ l) = ⊤
+  Site (Γ₁ ∗ Γ₂) = Site Γ₁ ⊎ Site Γ₂
+  Site (Γ₁ + Γ₂) = (Bool × Loc) ⊎ (Site Γ₁ ⊎ Site Γ₂)
+
+  Event : {Γ₁ Γ₂ : ChoreoHeap} → (Γ₁ ⇶ Γ₂) → Type
+  Event (x ∥ x') = Event x ⊎ Event x'
+  Event (x ◇ x') = ((Bool × Loc) ⊎ (Bool × Loc)) ⊎ (Event x ⊎ Event x')
+  Event {Γ₁} {Γ₂} (id Γ) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (swap _ _) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (assoc _ _ _) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (assoc⁻¹ _ _ _) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (distrib _ _ _) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (distrib⁻¹ _ _ _) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (x₁ ; x₂) = Event x₁ ⊎ Event x₂
+  Event {Γ₁} {Γ₂} (locally l x) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (transmit l₁ l₂) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (init l) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (term l) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (fork l a b) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (join l a b) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (branch l a b) = Site Γ₁ ⊎ Site Γ₂
+  Event {Γ₁} {Γ₂} (coalesce l a b) = Site Γ₁ ⊎ Site Γ₂
+
+  TrailingEvent[_,_] : (x : Γ₁ ⇶ Γ₂) → Site Γ₁ → Event x
+  TrailingEvent[ id _            , s ]             = inj₁ s
+  TrailingEvent[ swap      _ _   , s ]             = inj₁ s
+  TrailingEvent[ assoc     _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ assoc⁻¹   _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ distrib   _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ distrib⁻¹ _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ x₁ ; x₂         , s ]             = inj₁ TrailingEvent[ x₁ , s ]
+  TrailingEvent[ x  ∥ x'         , inj₁ s ]        = inj₁ TrailingEvent[ x , s ]
+  TrailingEvent[ x  ∥ x'         , inj₂ s ]        = inj₂ TrailingEvent[ x' , s ]
+  TrailingEvent[ x  ◇ x'         , inj₁ s ]        = inj₁ (inj₁ s)
+  TrailingEvent[ x  ◇ x'         , inj₂ (inj₁ s) ] = inj₂ (inj₁ TrailingEvent[ x , s ])
+  TrailingEvent[ x  ◇ x'         , inj₂ (inj₂ s) ] = inj₂ (inj₂ TrailingEvent[ x' , s ])
+  TrailingEvent[ locally   _ _   , s ]             = inj₁ s
+  TrailingEvent[ transmit  _ _   , s ]             = inj₁ s
+  TrailingEvent[ term      _     , s ]             = inj₁ s
+  TrailingEvent[ fork      _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ join      _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ branch    _ _ _ , s ]             = inj₁ s
+  TrailingEvent[ coalesce  _ _ _ , s ]             = inj₁ s
+
+  LeadingEvent[_,_] : (x : Γ₁ ⇶ Γ₂) → Site Γ₂ → Event x
+  LeadingEvent[ id        _     , s ]             = inj₂ s
+  LeadingEvent[ swap      _ _   , s ]             = inj₂ s
+  LeadingEvent[ assoc     _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ assoc⁻¹   _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ distrib   _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ distrib⁻¹ _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ x₁ ; x₂         , s ]             = inj₂ LeadingEvent[ x₂ , s ]
+  LeadingEvent[ x  ∥ x'         , inj₁ s ]        = inj₁ LeadingEvent[ x , s ]
+  LeadingEvent[ x  ∥ x'         , inj₂ s ]        = inj₂ LeadingEvent[ x' , s ]
+  LeadingEvent[ x  ◇ x'         , inj₁ s ]        = inj₁ (inj₂ s)
+  LeadingEvent[ x  ◇ x'         , inj₂ (inj₁ s) ] = inj₂ (inj₁ LeadingEvent[ x , s ])
+  LeadingEvent[ x  ◇ x'         , inj₂ (inj₂ s) ] = inj₂ (inj₂ LeadingEvent[ x' , s ])
+  LeadingEvent[ locally   _ _   , s ]             = inj₂ s
+  LeadingEvent[ transmit  _ _   , s ]             = inj₂ s
+  LeadingEvent[ init      _     , s ]             = inj₂ s
+  LeadingEvent[ fork      _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ join      _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ branch    _ _ _ , s ]             = inj₂ s
+  LeadingEvent[ coalesce  _ _ _ , s ]             = inj₂ s
+
+  is-same : (x : Γ₁ ⇶ Γ₂) → (_ _ : Event x) → Type
+  is-same (id _) e₁ e₂ = e₁ ≡ e₂
+  is-same (swap Γ₁ Γ₂) e₁ e₂ = e₁ ≡ e₂
+  is-same (assoc Γ₁ Γ₂ Γ₃) e₁ e₂ = e₁ ≡ e₂
+  is-same (assoc⁻¹ Γ₁ Γ₂ Γ₃) e₁ e₂ = e₁ ≡ e₂
+  is-same (distrib Γ₁ Γ₂ Γ₃) e₁ e₂ = e₁ ≡ e₂
+  is-same (distrib⁻¹ Γ₁ Γ₂ Γ₃) e₁ e₂ = e₁ ≡ e₂
+  is-same (x₁ ; x₂) (inj₁ e₁) (inj₁ e₂) = is-same x₁ e₁ e₂
+  is-same (x₁ ; x₂) (inj₁ e₁) (inj₂ e₂) = ∃[ s ] is-same x₁ e₁ LeadingEvent[ x₁ , s ] × is-same x₂ TrailingEvent[ x₂ , s ] e₂
+  is-same (x₁ ; x₂) (inj₂ e₂) (inj₁ e₁) = ∃[ s ] is-same x₁ e₁ LeadingEvent[ x₁ , s ] × is-same x₂ TrailingEvent[ x₂ , s ] e₂
+  is-same (x₁ ; x₂) (inj₂ e₁) (inj₂ e₂) = is-same x₂ e₁ e₂
+  is-same (x  ∥ x') (inj₁ e₁) (inj₁ e₂) = is-same x e₁ e₂
+  is-same (x  ∥ x') (inj₁ e₁) (inj₂ e₂) = ⊥
+  is-same (x  ∥ x') (inj₂ e₁) (inj₁ e₂) = ⊥
+  is-same (x  ∥ x') (inj₂ e₁) (inj₂ e₂) = is-same x' e₁ e₂
+  is-same (x ◇ x') (inj₁ e₁) (inj₁ e₂) = e₁ ≡ e₂
+  is-same (x ◇ x') (inj₁ e₁) (inj₂ e₂) = ⊥
+  is-same (x ◇ x') (inj₂ e₁) (inj₁ e₂) = ⊥
+  is-same (x ◇ x') (inj₂ (inj₁ e₁)) (inj₂ (inj₁ e₂)) = is-same x e₁ e₂
+  is-same (x ◇ x') (inj₂ (inj₁ e₁)) (inj₂ (inj₂ e₂)) = ⊥
+  is-same (x ◇ x') (inj₂ (inj₂ e₁)) (inj₂ (inj₁ e₂)) = ⊥
+  is-same (x ◇ x') (inj₂ (inj₂ e₁)) (inj₂ (inj₂ e₂)) = is-same x' e₁ e₂
+  is-same (locally l x) e₁ e₂ = e₁ ≡ e₂
+  is-same (transmit l₁ l₂) e₁ e₂ = e₁ ≡ e₂
+  is-same (init l) e₁ e₂ = e₁ ≡ e₂
+  is-same (term l) e₁ e₂ = e₁ ≡ e₂
+  is-same (fork l a b) e₁ e₂ = e₁ ≡ e₂
+  is-same (join l a b) e₁ e₂ = e₁ ≡ e₂
+  is-same (branch l a b) e₁ e₂ = e₁ ≡ e₂
+  is-same (coalesce l a b) e₁ e₂ = e₁ ≡ e₂
+
+  _~_ : {x : Γ₁ ⇶ Γ₂} → (_ _ : Event x) → Type
+  e₁ ~ e₂ = is-same _ e₁ e₂
+
+  _≟_ : {x : Γ₁ ⇶ Γ₂} (e₁ e₂ : Event x) → Dec (e₁ ~ e₂)
+  e₁ ≟ e₂ = {!!}
+
   Centralized : ChoreoHeap → Ty
   Centralized ∅         = 𝟙
   Centralized (τ ＠ l)  = τ
