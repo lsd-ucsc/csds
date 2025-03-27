@@ -102,6 +102,7 @@ EnabledPred Stim S M n = Fin n → Stim → (Conf S M n) → Type
 
 -- | Selectively update the recipient's (of a deliverable message)
 -- state and outbound messages by running its reaction function.
+-- This lifts a reaction (local) to act on a configuration (global).
 deliver : ∀ {Stim S M n} {Γ : Conf S M n}
   → Reaction Stim S M n
   → (Enabled : EnabledPred Stim S M n)
@@ -116,14 +117,6 @@ deliver {Γ = Γ} a _ cleanup r σ enabled =
   let nodes' = nodes [ r ]≔ r' in -- update node r's state
   let chans' = chans [ r ]%= zipWith _++_ out in -- add new messages to r→*
   conf nodes' chans'
-
---data App (S M : Type) (n : ℕ) (a : Reaction (M × Fin n) S M n) : ConfRel S M n where
---  drive : (m : M) → (Γ : Conf S M n)
---        → (s : Fin n) → (r : Fin n)
---        → (d : ∃[ ms ] lookup (lookup (Conf.chans Γ) s) r ≡ ms ∷ʳ m)
---        → App S M n a Γ (deliver {_} {_} {_} {m} {Γ} a (s , r , d))
-
--- SPAAAACE DIMENSION need a think to lift a local application to a global application
 
 -- TIIIIIIME DIMENSION need a think to lift a global application to a run
 
@@ -192,13 +185,15 @@ lift a nothing (live st) =
   , replicate _ (red ∷ [])
   )
 
+
+
 -- "here is a stimulus within the CLC"
 Foo : ∀ {S M n} → EnabledPred (Maybe (CLM M × Fin n)) (CLS S M n) (CLM M) n
-Foo p nothing _ = ⊤
-Foo r (just (m , s)) (conf nodes chans) = ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m
+Foo p nothing _ = ⊤ -- spontaneously start CL
+Foo r (just (m , s)) (conf nodes chans) = ∃[ ms ] lookup (lookup chans s) r ≡ ms ∷ʳ m -- remove an inflight message
 
 cleanupFoo : ∀ {S M n r σ} {Γ : Conf (CLS S M n) (CLM M) n}
                   → Foo r σ Γ → Conf (CLS S M n) (CLM M) n
 cleanupFoo {σ = nothing} {Γ} _ = Γ
-cleanupFoo {r = r} {σ = just (_ , s)} {conf nodes chans} (ms , _) = {!!}
--- replace the s→r channel with ms (eliding the final element)
+cleanupFoo {r = r} {σ = just (_ , s)} {conf nodes chans} (ms , _) =
+  conf nodes (chans [ s ]%= (_[ r ]≔ ms)) -- replace the s→r channel with ms (eliding the final element)
