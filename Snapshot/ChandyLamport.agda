@@ -118,9 +118,22 @@ deliver {Γ = Γ} a _ cleanup r σ enabled =
   let chans' = chans [ r ]%= zipWith _++_ out in -- add new messages to r→*
   conf nodes' chans'
 
--- TIIIIIIME DIMENSION need a think to lift a global application to a run
-
-
+module _
+    {Stim S M : Type}
+    {n : ℕ}
+    (a : Reaction Stim S M n)
+    (Enabled : EnabledPred Stim S M n)
+    (cleanup : ∀ {r σ Γ} → Enabled r σ Γ → Conf S M n)
+    where
+  -- TIIIIIIME DIMENSION need a think to lift a global application to a run
+  -- JMC: we need a type that represents the data of a run
+  -- PLR: not a list of configurations, but an initial state and a list of stims (connected somehow)
+  -- JMC: a fusion of both
+  -- JMC: a run will relate two configurations
+  data Run : ConfRel S M n where
+    noop : ∀ Γ → Run Γ Γ
+    concat : ∀ {Γ₀ Γ₁ Γ₂} → Run Γ₀ Γ₁ → Run Γ₁ Γ₂ → Run Γ₁ Γ₂
+    step : ∀ {Γ r σ} → (enabled : Enabled r σ Γ) → Run Γ (deliver a Enabled cleanup r σ enabled)
 
 -- * Chandy Lamport bits
 
