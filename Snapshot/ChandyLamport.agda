@@ -199,3 +199,6 @@ cleanupFoo : ∀ {S M n r σ} {Γ : Conf (CLS S M n) (CLM M) n}
 cleanupFoo {σ = nothing} {Γ} _ = Γ
 cleanupFoo {r = r} {σ = just (_ , s)} {conf nodes chans} (ms , _) =
   conf nodes (chans [ s ]%= (_[ r ]≔ ms)) -- replace the s→r channel with ms (eliding the final element)
+
+CLRun : ∀ {S M n} → Reaction (M × Fin n) S M n → ConfRel (CLS S M n) (CLM M) n
+CLRun a = Run (lift a) Foo cleanupFoo
