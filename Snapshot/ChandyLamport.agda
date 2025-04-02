@@ -67,7 +67,8 @@ open import Data.Fin using (Fin; zero; suc)
 open import Relation.Binary.PropositionalEquality as Eq using (_≡_)
 open import Data.Unit using (⊤)
 
-import Execution.Core
+open import Execution.Core using (_⇶_; _∥_; _⟫_; tick; fork; join; init; term; perm)
+open import Execution.Sites using (Tree; ∅; site; _∗_)
 
 -- | State at each node and in the network.
 -- * Per node.
@@ -200,5 +201,17 @@ CLclean {σ = nothing} {Γ} _ = Γ
 CLclean {r = r} {σ = just (_ , s)} {conf nodes chans} (ms , _) =
   conf nodes (chans [ s ]%= (_[ r ]≔ ms)) -- replace the s→r channel with ms (eliding the final element)
 
-CLRun : ∀ {S M n} → Reaction (M × Fin n) S M n → ConfRel (CLS S M n) (CLM M) n
-CLRun a = Run (lift a) CLStim CLclean
+module _
+    (S M : Type)
+    (n : ℕ)
+    (a : Reaction (M × Fin n) S M n)
+    where
+  CLRun : ConfRel (CLS S M n) (CLM M) n
+  CLRun = Run (lift a) CLStim CLclean
+
+  interpS : Conf (CLS S M n) (CLM M) n → Tree
+  interpS = {!!}
+
+  -- JMC: need way to turn runs into CSDs
+  interpT : ∀ {Γ₀ Γ₁} → CLRun Γ₀ Γ₁ → interpS Γ₀ ⇶ interpS Γ₁
+  interpT = {!!}
