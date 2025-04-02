@@ -96,28 +96,6 @@ Deliverable m (conf nodes chans) =
 EnabledPred : Type → Type → Type → ℕ → Type₁
 EnabledPred Stim S M n = Fin n → Stim → (Conf S M n) → Type
 
--- given an enabled stimulus we want to know how to obtain a subsequent state
-
--- node blows up
-
--- | Selectively update the recipient's (of a deliverable message)
--- state and outbound messages by running its reaction function.
--- This lifts a reaction (local) to act on a configuration (global).
-deliver : ∀ {Stim S M n} {Γ : Conf S M n}
-  → Reaction Stim S M n
-  → (Enabled : EnabledPred Stim S M n)
-  → (∀ {r σ Γ} → Enabled r σ Γ → Conf S M n)
-  → (r : Fin n)
-  → (σ : Stim)
-  → Enabled r σ Γ
-  → Conf S M n
-deliver {Γ = Γ} a _ cleanup r σ enabled =
-  let conf nodes chans = cleanup enabled in -- TODO factor this out of deliver
-  let (r' , out) = a σ (lookup nodes r) in
-  let nodes' = nodes [ r ]≔ r' in -- update node r's state
-  let chans' = chans [ r ]%= zipWith _++_ out in -- add new messages to r→*
-  conf nodes' chans'
-
 module _
     {Stim S M : Type}
     {n : ℕ}
@@ -125,15 +103,26 @@ module _
     (Enabled : EnabledPred Stim S M n)
     (cleanup : ∀ {r σ Γ} → Enabled r σ Γ → Conf S M n)
     where
-  -- TIIIIIIME DIMENSION need a think to lift a global application to a run
-  -- JMC: we need a type that represents the data of a run
-  -- PLR: not a list of configurations, but an initial state and a list of stims (connected somehow)
-  -- JMC: a fusion of both
-  -- JMC: a run will relate two configurations
+  -- | Selectively update the recipient's (of a deliverable message)
+  -- state and outbound messages by running its reaction function.
+  -- This lifts a reaction (local) to act on a configuration (global).
+  deliver : ∀ {Γ : Conf S M n}
+    → (r : Fin n)
+    → (σ : Stim)
+    → Enabled r σ Γ
+    → Conf S M n
+  deliver r σ enabled =
+    let conf nodes chans = cleanup enabled in
+    let (r' , out) = a σ (lookup nodes r) in
+    let nodes' = nodes [ r ]≔ r' in -- update node r's state
+    let chans' = chans [ r ]%= zipWith _++_ out in -- add new messages to r→*
+    conf nodes' chans'
+
+  -- | Lift a global application (deliver) to a sequence of those (a run).
   data Run : ConfRel S M n where
     noop : ∀ Γ → Run Γ Γ
     concat : ∀ {Γ₀ Γ₁ Γ₂} → Run Γ₀ Γ₁ → Run Γ₁ Γ₂ → Run Γ₁ Γ₂
-    step : ∀ {Γ r σ} → (enabled : Enabled r σ Γ) → Run Γ (deliver a Enabled cleanup r σ enabled)
+    step : ∀ {Γ r σ} → (enabled : Enabled r σ Γ) → Run Γ (deliver r σ enabled)
 
 -- * Chandy Lamport bits
 
