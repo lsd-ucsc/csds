@@ -122,7 +122,7 @@ module _
   -- | Lift a global application (deliver) to a sequence of those (a run).
   data Run : ConfRel S M n where
     noop : ∀ Γ → Run Γ Γ
-    concat : ∀ {Γ₀ Γ₁ Γ₂} → Run Γ₀ Γ₁ → Run Γ₁ Γ₂ → Run Γ₁ Γ₂
+    concat : ∀ {Γ₀ Γ₁ Γ₂} → Run Γ₀ Γ₁ → Run Γ₁ Γ₂ → Run Γ₀ Γ₂
     step : ∀ {Γ r σ} → (enabled : Enabled r σ Γ) → Run Γ (deliver r σ enabled)
 
 -- * Chandy Lamport bits
