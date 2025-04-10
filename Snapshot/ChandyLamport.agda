@@ -67,8 +67,11 @@ open import Data.Fin using (Fin; zero; suc)
 open import Relation.Binary.PropositionalEquality as Eq using (_≡_)
 open import Data.Unit using (⊤)
 
-open import Execution.Core using (_⇶_; _∥_; _⟫_; tick; fork; join; init; term; perm)
-open import Execution.Sites using (Tree; ∅; site; _∗_)
+open import Execution.Core
+  using (_⇶_; _∥_; _⟫_; tick; fork; join; init; term; perm)
+open import Execution.Sites
+  using (Tree; ∅; site; _∗_)
+  using (_≅_; ‵refl)
 
 -- | State at each node and in the network.
 -- * Per node.
@@ -235,6 +238,8 @@ module _
   interpSpace (conf nodes chans) =
     interpSpaceNodes nodes ∗ interpSpaceChans chans
 
-  -- JMC: need way to turn runs into CSDs
   interpTime : ∀ {Γ₀ Γ₁} → CLRun Γ₀ Γ₁ → interpSpace Γ₀ ⇶ interpSpace Γ₁
-  interpTime = {!!}
+  interpTime (noop _) = perm (‵refl _)
+  interpTime (concat x₁ x₂) = interpTime x₁ ⟫ interpTime x₂
+  interpTime (step enabled) = {!!}
+  -- JMC: we are gonna get stuck for a long time on this hole
