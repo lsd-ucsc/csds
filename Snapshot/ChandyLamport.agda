@@ -209,9 +209,32 @@ module _
   CLRun : ConfRel (CLS S M n) (CLM M) n
   CLRun = Run (lift a) CLStim CLclean
 
-  interpS : Conf (CLS S M n) (CLM M) n → Tree
-  interpS = {!!}
+  -- A channel is specific to a sender and also to a receiver.
+  interpSpaceChannel : ∀ {M : Type} → List M → Tree
+  interpSpaceChannel [] = ∅
+  interpSpaceChannel (m ∷ ms) = site ∗ interpSpaceChannel ms
+
+  -- An outbox groups by sender (all the recipients are mixed up).
+  interpSpaceOutbox : ∀ {M : Type} {n} → Vec (List M) n → Tree
+  interpSpaceOutbox [] = ∅
+  interpSpaceOutbox (chan ∷ chans) =
+    interpSpaceChannel chan ∗ interpSpaceOutbox chans
+
+  -- Named after the field
+  interpSpaceChans : ∀ {M : Type} {n n'} → Vec (Vec (List M) n) n' → Tree
+  interpSpaceChans [] = ∅
+  interpSpaceChans (outbox ∷ outboxen) =
+    interpSpaceOutbox outbox ∗ interpSpaceChans outboxen
+
+  -- Named after the field
+  interpSpaceNodes : ∀ {S : Type} {n} → Vec S n → Tree
+  interpSpaceNodes [] = ∅
+  interpSpaceNodes (state ∷ states) = site ∗ interpSpaceNodes states
+
+  interpSpace : Conf (CLS S M n) (CLM M) n → Tree
+  interpSpace (conf nodes chans) =
+    interpSpaceNodes nodes ∗ interpSpaceChans chans
 
   -- JMC: need way to turn runs into CSDs
-  interpT : ∀ {Γ₀ Γ₁} → CLRun Γ₀ Γ₁ → interpS Γ₀ ⇶ interpS Γ₁
-  interpT = {!!}
+  interpTime : ∀ {Γ₀ Γ₁} → CLRun Γ₀ Γ₁ → interpSpace Γ₀ ⇶ interpSpace Γ₁
+  interpTime = {!!}
