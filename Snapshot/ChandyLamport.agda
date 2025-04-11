@@ -243,3 +243,18 @@ module _
   interpTime (concat x₁ x₂) = interpTime x₁ ⟫ interpTime x₂
   interpTime (step enabled) = {!!}
   -- JMC: we are gonna get stuck for a long time on this hole
+  --
+  -- phase one is to apply the message to the node state (produce a
+  -- perm that moves the message over next to its recipient state)
+  --
+  -- phase two is to do a join, and a delivery (in a tick), and then
+  -- fork such that the outbox of resulting messages are next to the
+  -- node state
+  --
+  -- phase three is to do a perm that splits the outbox into channels
+  -- and prepends them into their appropriate recipient slots
+  --  * JMC: is the next deliverable message at the top (outermost) or
+  --    the bottom (innermost)
+  --
+  -- phase four is to prove that the configuration we get is the same
+  -- as what deliver produced
